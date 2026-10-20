@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from datetime import UTC, date, datetime, time, timedelta
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -8,6 +9,7 @@ import pytest
 from flexcast.features import FEATURE_COLUMNS, build, decision_time_for
 from flexcast.history import History
 from flexcast.settlement import LONDON, period_starts
+from flexcast.storage import Storage
 from tests.unit.synthetic import encode_price, encode_publish
 
 HistoryFactory = Callable[[date, date], History]
@@ -206,3 +208,11 @@ def test_availability_rules_are_pinned(synthetic_history: HistoryFactory) -> Non
     assert (h.mid["available_at"] == h.mid["start_time"] + hour).all()
     assert (h.ndf["available_at"] == h.ndf["publish_time"]).all()
     assert (h.windfor["available_at"] == h.windfor["publish_time"]).all()
+
+
+def test_history_load_from_empty_storage(tmp_path: Path) -> None:
+    """A fresh deployment has no data yet; loading must give an empty history, not crash."""
+    h = History.load(Storage(f"file://{tmp_path}"))
+    assert h.prices.empty and h.mid.empty and h.ndf.empty and h.windfor.empty
+    assert h.actual_prices(NORMAL).empty
+    assert h.as_of("ndf", decision_time_for(NORMAL), NORMAL).empty

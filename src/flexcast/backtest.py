@@ -91,6 +91,8 @@ def feature_table(
             .assign(target_date=d)
             .set_index("target_date", append=True)["price"]
         )
+    if not xs:
+        return pd.DataFrame(), pd.Series(dtype=float), skipped
     X_all = pd.concat(xs).reorder_levels(["target_date", "start_time"])
     y_all = pd.concat(ys).reorder_levels(["target_date", "start_time"])
     return X_all, y_all, skipped

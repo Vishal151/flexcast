@@ -165,3 +165,53 @@ def history_features() -> list[str]:
     from flexcast.features import FEATURE_COLUMNS
 
     return FEATURE_COLUMNS
+
+
+@app.command()
+def train(
+    as_of: Annotated[
+        str | None, typer.Option(help="ISO instant; trains on days known by then (default now)")
+    ] = None,
+) -> None:
+    """Train the forecast model on all history known at AS_OF and mark it LATEST."""
+    from flexcast.history import History
+    from flexcast.jobs import train as train_model
+
+    settings = Settings()
+    storage = Storage(settings.data_uri)
+    when = datetime.fromisoformat(as_of) if as_of else datetime.now(UTC)
+    if when.tzinfo is None:
+        raise typer.BadParameter("--as-of must include a timezone, e.g. 2025-10-28T12:00:00+00:00")
+    prefix = train_model(History.load(storage), storage, when, settings.git_sha)
+    typer.echo(f"trained {prefix}")
+
+
+@app.command()
+def plan(
+    day: Annotated[
+        str | None, typer.Option("--date", help="Target London day (default tomorrow)")
+    ] = None,
+) -> None:
+    """Forecast and schedule one day using the LATEST model."""
+    from flexcast.history import History
+    from flexcast.jobs import plan as make_plan
+
+    settings = Settings()
+    storage = Storage(settings.data_uri)
+    target = (
+        date.fromisoformat(day)
+        if day
+        else datetime.now(UTC).astimezone(LONDON).date() + timedelta(days=1)
+    )
+    result = make_plan(History.load(storage), storage, target, settings)
+    typer.echo(f"planned {target}: expected £{result.expected_gbp:.2f}")
+
+
+@app.command()
+def serve() -> None:
+    """Run the HTTP API on $PORT (default 8080)."""
+    import uvicorn
+
+    from flexcast.api import create_app
+
+    uvicorn.run(create_app(), host="0.0.0.0", port=Settings().port, log_level="info")  # noqa: S104

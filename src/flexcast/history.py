@@ -25,6 +25,24 @@ MID_PROVIDER = "APXMIDP"  # N2EX has gaps and zero-volume periods
 Name = Literal["prices", "mid", "ndf", "windfor"]
 
 
+UTC_TIME = "datetime64[us, UTC]"
+# The raw columns from_frames needs, so an empty bucket loads as an empty history.
+EMPTY_SCHEMAS: dict[str, dict[str, str]] = {
+    "system_prices": {
+        "start_time": UTC_TIME,
+        "created_date_time": UTC_TIME,
+        "system_sell_price": "float64",
+    },
+    "mid": {"start_time": UTC_TIME, "data_provider": "object", "price": "float64"},
+    "ndf": {"publish_time": UTC_TIME, "start_time": UTC_TIME, "demand": "int64"},
+    "windfor": {"publish_time": UTC_TIME, "start_time": UTC_TIME, "generation": "int64"},
+}
+
+
+def _empty(schema: dict[str, str]) -> pd.DataFrame:
+    return pd.DataFrame({col: pd.Series(dtype=dtype) for col, dtype in schema.items()})
+
+
 def _with_london_keys(df: pd.DataFrame) -> pd.DataFrame:
     """Add London date and clock time (HH:MM) for 'same time on another day' lookups."""
     local = df["start_time"].dt.tz_convert(LONDON)
@@ -73,12 +91,11 @@ class History:
 
     @classmethod
     def load(cls, storage: Storage) -> "History":
-        return cls.from_frames(
-            storage.read_parquet_dir("raw/system_prices"),
-            storage.read_parquet_dir("raw/mid"),
-            storage.read_parquet_dir("raw/ndf"),
-            storage.read_parquet_dir("raw/windfor"),
-        )
+        def read(dataset: str) -> pd.DataFrame:
+            df = storage.read_parquet_dir(f"raw/{dataset}")
+            return df if not df.empty else _empty(EMPTY_SCHEMAS[dataset])  # fresh deployment
+
+        return cls.from_frames(read("system_prices"), read("mid"), read("ndf"), read("windfor"))
 
     def as_of(
         self, name: Name, decision_time: datetime, target_date: date | None = None

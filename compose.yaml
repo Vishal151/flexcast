@@ -1,0 +1,98 @@
+# Local "compose" profile: the same image as GCP, with emulated dependencies.
+#   make up     -> gcs, gcs-init, upstream-mock, api (waits until healthy)
+#   docker compose run --rm ingest --start 2025-06-11 --end 2025-06-11
+#   docker compose run --rm train | plan --date 2025-06-11
+#   make down
+name: flexcast
+
+x-app: &app
+  image: flexcast:local
+  build: .
+  environment: &app-env
+    FLEXCAST_DATA_URI: gs://flexcast-local
+    FLEXCAST_ELEXON_BASE_URL: http://upstream-mock:8080/elexon
+    FLEXCAST_OCTOPUS_BASE_URL: http://upstream-mock:8080/octopus
+    STORAGE_EMULATOR_HOST: http://gcs:4443
+    FSSPEC_GCS_TOKEN: anon  # emulator only: no credentials (real GCP uses ADC / service account)
+  depends_on:
+    gcs-init:
+      condition: service_completed_successfully
+    upstream-mock:
+      condition: service_healthy
+
+services:
+  gcs:
+    image: fsouza/fake-gcs-server:1.52.2
+    # -external-url: the address the emulator hands out for resumable uploads; it must resolve
+    # inside the compose network (its default, 0.0.0.0, means "this container" to a client).
+    command: ["-scheme", "http", "-port", "4443", "-external-url", "http://gcs:4443",
+              "-public-host", "gcs:4443", "-backend", "memory"]
+    ports: ["4443:4443"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4443/storage/v1/b"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  # Creates the bucket the app uses (a real project would have it from deploy/ scripts).
+  gcs-init:
+    image: flexcast:local
+    build: .
+    entrypoint: ["python", "-c"]
+    command:
+      - |
+        import json, urllib.error, urllib.request
+        req = urllib.request.Request("http://gcs:4443/storage/v1/b", method="POST",
+            data=json.dumps({"name": "flexcast-local"}).encode(),
+            headers={"content-type": "application/json"})
+        try:
+            urllib.request.urlopen(req)
+        except urllib.error.HTTPError as e:
+            if e.code != 409:  # 409: already exists
+                raise
+    depends_on:
+      gcs:
+        condition: service_healthy
+
+  upstream-mock:
+    image: flexcast:local
+    build: .
+    entrypoint: ["uvicorn", "mock_upstream.app:app", "--host", "0.0.0.0", "--port", "8080"]
+    working_dir: /mock
+    environment:
+      MOCK_FIXTURES: /mock/tests/fixtures
+    volumes:
+      - ./mock_upstream:/mock/mock_upstream:ro
+      - ./tests/fixtures:/mock/tests/fixtures:ro
+    ports: ["8081:8080"]
+    healthcheck: &http-health
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  api:
+    <<: *app
+    command: ["serve"]
+    ports: ["8080:8080"]
+    mem_limit: 1g  # mirror the Cloud Run service limit
+    healthcheck: *http-health
+
+  # Jobs: not started by `up`; run with `docker compose run --rm <job> [args]`.
+  ingest:
+    <<: *app
+    entrypoint: ["flexcast", "ingest"]  # `run --rm ingest <args>` appends args to the subcommand
+    profiles: ["jobs"]
+    mem_limit: 1g
+
+  train:
+    <<: *app
+    entrypoint: ["flexcast", "train"]  # `run --rm train <args>` appends args to the subcommand
+    profiles: ["jobs"]
+    mem_limit: 2g
+
+  plan:
+    <<: *app
+    entrypoint: ["flexcast", "plan"]  # `run --rm plan <args>` appends args to the subcommand
+    profiles: ["jobs"]
+    mem_limit: 1g

@@ -2,7 +2,6 @@
 business logic never knows where data lives."""
 
 import io
-import uuid
 
 import fsspec
 import pandas as pd
@@ -18,13 +17,22 @@ class Storage:
         return f"{self.root}/{path.lstrip('/')}"
 
     def write_bytes(self, data: bytes, path: str) -> None:
-        """Write to a temp object then move, so readers never see a half-written file."""
+        """Atomic write: readers never see a half-written file.
+
+        autocommit=False makes fsspec stage the write and publish it on commit(): a temp file +
+        rename on local disk, a finalised upload on GCS (objects only appear once complete).
+        """
         target = self._abs(path)
         self.fs.makedirs(target.rsplit("/", 1)[0], exist_ok=True)
-        tmp = f"{target}.tmp-{uuid.uuid4().hex}"
-        with self.fs.open(tmp, "wb") as f:
+        f = self.fs.open(target, "wb", autocommit=False)
+        try:
             f.write(data)
-        self.fs.mv(tmp, target)
+            f.close()
+            f.commit()
+        except BaseException:
+            f.discard()
+            raise
+        self.fs.invalidate_cache(target.rsplit("/", 1)[0])
 
     def exists(self, path: str) -> bool:
         return bool(self.fs.exists(self._abs(path)))
@@ -60,7 +68,10 @@ class Storage:
     def write_text(self, text: str, path: str) -> None:
         self.write_bytes(text.encode(), path)
 
-    def read_text(self, path: str) -> str:
+    def read_bytes(self, path: str) -> bytes:
         with self.fs.open(self._abs(path), "rb") as f:
             data: bytes = f.read()
-        return data.decode()
+        return data
+
+    def read_text(self, path: str) -> str:
+        return self.read_bytes(path).decode()

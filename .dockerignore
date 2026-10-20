@@ -1,0 +1,6 @@
+# Only pyproject.toml, uv.lock and src/ are needed to build the image.
+*
+!pyproject.toml
+!uv.lock
+!src/
+**/__pycache__

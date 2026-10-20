@@ -15,4 +15,17 @@ backtest:
 	FLEXCAST_GIT_SHA=$$(git rev-parse --short HEAD) uv run flexcast backtest \
 		--train-start 2024-10-20 --test-start 2025-10-20 --test-end 2026-10-19
 
-.PHONY: lint test ingest backtest
+docker:
+	docker build -t flexcast:local .
+
+# Build the image, start gcs + upstream-mock + api, and wait until all are healthy.
+up:
+	docker compose up -d --build --wait
+
+down:
+	docker compose down -v --remove-orphans
+
+itest:
+	uv run pytest -m integration tests/integration
+
+.PHONY: lint test ingest backtest docker up down itest
