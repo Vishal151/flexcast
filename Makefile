@@ -28,4 +28,14 @@ down:
 itest:
 	uv run pytest -m integration tests/integration
 
-.PHONY: lint test ingest backtest docker up down itest
+# Load the fixture days into the running stack, train and plan, so the API has something to show.
+DEMO_RUN = docker compose run --rm -q
+demo:
+	for d in 2025-03-30 2025-06-11 2025-10-26; do \
+		$(DEMO_RUN) ingest --start $$d --end $$d --datasets system_prices,mid,fuelhh,agile; done
+	$(DEMO_RUN) ingest --start 2025-06-09 --end 2025-06-10 --datasets ndf,windfor
+	$(DEMO_RUN) train --as-of 2025-10-28T12:00:00+00:00
+	$(DEMO_RUN) plan --date 2025-06-11
+	@echo "API: http://localhost:8080/docs  e.g. /schedule?date=2025-06-11"
+
+.PHONY: lint test ingest backtest docker up down itest demo

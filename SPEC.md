@@ -185,14 +185,14 @@ Each stage has a **learning goal**, a **build** list, **acceptance** criteria, a
 ### Stage 3 — Containerise and emulate GCP locally (1 day)
 **Learn:** Docker multi-stage builds; compose; env-driven config; emulators; integration testing.
 **Build:**
-- Multi-stage Dockerfile (uv, slim base, non-root, `PORT` honoured). Image < 500 MB.
+- Multi-stage Dockerfile (uv, slim base, non-root, `PORT` honoured). Image < 500 MB compressed (registry/pull size; on-disk is larger because pyarrow, scipy, pandas and numpy alone are ~400 MB).
 - `compose.yaml` with `gcs`, `upstream-mock`, `api`, and job services (§3). Healthchecks + `depends_on: condition: service_healthy`.
 - `compose` profile: `FLEXCAST_DATA_URI=gs://flexcast-local`, `STORAGE_EMULATOR_HOST`, upstream base URLs → `upstream-mock`.
 - `mock_upstream/`: serves the Stage 0 fixtures at the same paths as the real APIs.
 - FastAPI endpoints: `/schedule?date=`, `/forecast?date=`, `/health`, `/metrics` (rolling 30-day forecast error and £ capture).
 - Integration tests (`-m integration`): ingest → train → plan end-to-end in containers; files land in emulated GCS; API returns a valid schedule; re-running ingest is idempotent through the real GCS client.
 - `make up`, `make down`, `make itest`.
-**Accept:** `make up && make itest` passes on a clean machine with only Docker installed; no code differences between `local` and `compose` profiles beyond config.
+**Accept:** `make up && make itest` passes on a clean machine with only Docker and uv installed; no code differences between `local` and `compose` profiles beyond config.
 **Check yourself:** What would break if the app wrote to `/app/data` instead of going through `FLEXCAST_DATA_URI`? Why does the emulator need `STORAGE_EMULATOR_HOST` rather than a different code path?
 
 ### Stage 4 — CI (½ day)
@@ -244,6 +244,6 @@ README, in this order:
 - Multi-asset portfolio optimisation (next step only)
 
 ## 7. Definition of done
-- Clean checkout with only Docker installed → `make up && make test && make itest && make backtest` pass
+- Clean checkout with only Docker and uv installed → `make up && make test && make itest` pass; `make ingest` (backfill) then `make backtest` reproduces docs/results.md
 - Deployed, scheduled, producing daily schedules on GCP
 - README tells the £ story in the first screen

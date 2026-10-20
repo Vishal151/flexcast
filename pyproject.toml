@@ -66,7 +66,8 @@ testpaths = ["tests/unit"]
 addopts = "-ra --strict-markers"
 filterwarnings = [
     # Starlette's TestClient still works with httpx; this only nudges towards httpx2.
-    "ignore:Using `httpx` with `starlette.testclient` is deprecated:DeprecationWarning",
+    # (StarletteDeprecationWarning subclasses UserWarning, so match on the message only.)
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
 ]
 markers = [
     "integration: needs the compose stack (make up)",
