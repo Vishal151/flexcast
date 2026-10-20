@@ -19,14 +19,20 @@ docker:
 	docker build -t flexcast:local .
 
 # Build the image, start gcs + upstream-mock + api, and wait until all are healthy.
+# UP_FLAGS=--no-build lets CI reuse the image it already built with a layer cache.
+UP_FLAGS ?= --build
 up:
-	docker compose up -d --build --wait
+	docker compose up -d --wait $(UP_FLAGS)
 
 down:
 	docker compose down -v --remove-orphans
 
 itest:
 	uv run pytest -m integration tests/integration
+
+# Opt-in: hits the real Elexon and Octopus APIs (weekly in CI to catch upstream drift).
+live:
+	uv run pytest -m live tests/live
 
 # Load the fixture days into the running stack, train and plan, so the API has something to show.
 DEMO_RUN = docker compose run --rm -q
@@ -38,4 +44,4 @@ demo:
 	$(DEMO_RUN) plan --date 2025-06-11
 	@echo "API: http://localhost:8080/docs  e.g. /schedule?date=2025-06-11"
 
-.PHONY: lint test ingest backtest docker up down itest demo
+.PHONY: lint test ingest backtest docker up down itest live demo

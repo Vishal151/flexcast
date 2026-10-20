@@ -170,10 +170,9 @@ def test_image_runs_as_non_root() -> None:
 
 
 def test_image_compressed_size_under_500mb() -> None:
-    size = subprocess.run(
-        ["docker", "image", "inspect", "flexcast:local", "--format", "{{.Size}}"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    assert int(size) < 500 * 1024 * 1024
+    """Compressed size, measured the same way on every Docker (`docker image inspect .Size`
+    reports compressed on containerd image stores such as OrbStack, uncompressed elsewhere)."""
+    save = subprocess.Popen(["docker", "save", "flexcast:local"], stdout=subprocess.PIPE)
+    gz = subprocess.run(["gzip", "-1"], stdin=save.stdout, capture_output=True, check=True)
+    assert save.wait() == 0
+    assert len(gz.stdout) < 500 * 1024 * 1024
