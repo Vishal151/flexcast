@@ -85,7 +85,44 @@ Sample days: normal `2025-06-11` (48 periods), spring DST `2025-03-30` (46), aut
 
 ## Vintage visibility at decision time
 
-_To be filled in after the Stage 0 "check yourself" discussion._
+Worked example from the fixtures: target day **2025-06-11**, decision time **D-1 09:00 London =
+2025-06-10T08:00Z** (BST; in GMT it would be 09:00Z).
+
+### NDF
+74 vintages published before the target day touch 2025-06-11, from 2025-06-09T07:45Z to
+2025-06-10T22:47Z. About 47 more are published during the target day itself; those are irrelevant
+for a D-1 decision and were not recorded. The vintages come in three kinds:
+
+| Published (UTC) | Covers on D | Role |
+|---|---|---|
+| every ~30 min (`:16`/`:46`) until ~10:16 on D-1 | SP1–10 | rolling: rest of today + first ~5 h of tomorrow |
+| **07:45 once daily** | SP11–48 of D+1 (and SP1–10 of D+2) | the once-a-day run that fills in the rest of tomorrow |
+| every ~30 min from ~10:47 on D-1 | SP1–48 | full day-ahead coverage |
+
+At 2025-06-10T08:00Z:
+- the latest vintage overall is **07:45Z**, but it covers only SP11–48
+- the latest vintage covering SP1–10 is **07:16Z**
+- **no single vintage covers all 48 periods.** The first complete one is 10:47Z, after the decision.
+
+### WINDFOR
+The latest vintage before 08:00Z is **05:30Z**, and it covers all 24 hours of the target day. No
+stitching needed.
+
+### Rules for Stage 2 (`features.py`)
+1. **Select per target period, not per vintage:** for each `startTime`, take the row with the max
+   `publishTime < decision_time`. Picking "the latest vintage" and using only its rows would silently
+   drop SP1–10 or SP11–48.
+2. **Margins vary by season.** In BST the 07:45Z run lands 15 min before the deadline; in GMT it lands
+   75 min before. If the run is late, SP11–48 falls back to the previous day's 07:45Z run (24 h
+   older). Record the age of the forecast used (decision_time − publishTime) as a feature or
+   diagnostic.
+3. **Leakage test:** every NDF/WINDFOR row used must have `publishTime < decision_time`. The 10:47Z
+   vintage is published on D-1 but after the decision, so using it is leakage.
+
+### Alternative (not adopted)
+A decision time after ~11:00 London would give one complete NDF vintage and remove the stitching.
+We keep 09:00 (SPEC default, closer to real day-ahead market deadlines) and handle the stitching
+explicitly. It stays configurable.
 
 ## SPEC §2 edits (applied)
 WINDFOR hourly, MID provider `APXMIDP`, 1-day publish-window cap, MID instants, TEMP daily/low priority.
