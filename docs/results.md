@@ -16,8 +16,8 @@ copyright and database right.
 | strategy | days | £/battery/year | % of perfect | MAE £/MWh | pinball | p10-p90 coverage |
 |---|---|---|---|---|---|---|
 | perfect | 365 | 270.73 | 100.00 | 0.00 | 0.00 | 1.00 |
-| lgbm_quantile | 365 | 32.55 | 12.02 | 30.59 | 9.79 | 0.66 |
-| lgbm_risk_aware | 365 | 32.55 | 12.02 | 30.59 | 9.79 | 0.66 |
+| lgbm_risk_aware | 365 | 34.56 | 12.77 | 30.34 | 9.67 | 0.67 |
+| lgbm_quantile | 365 | 33.93 | 12.53 | 30.34 | 9.67 | 0.67 |
 | naive_last_day | 365 | -148.66 | -54.91 | 44.31 | 22.15 | 0.00 |
 | seasonal_naive | 365 | -154.79 | -57.17 | 45.45 | 22.72 | 0.00 |
 
@@ -27,8 +27,8 @@ copyright and database right.
 
 | strategy | 1,000 batteries (£k/yr) | 10,000 batteries (£k/yr) | 100,000 batteries (£k/yr) |
 |---|---|---|---|
-| lgbm_quantile | 33 | 326 | 3255 |
-| lgbm_risk_aware | 33 | 326 | 3255 |
+| lgbm_risk_aware | 35 | 346 | 3456 |
+| lgbm_quantile | 34 | 339 | 3393 |
 | naive_last_day | -149 | -1487 | -14866 |
 | seasonal_naive | -155 | -1548 | -15479 |
 
@@ -40,8 +40,8 @@ trades against, so the 100k figure is an upper bound.
 | strategy | 0p/kWh | 1p/kWh | 2p/kWh | 4p/kWh |
 |---|---|---|---|---|
 | perfect | £634 (100%) | £416 (100%) | £271 (100%) | £123 (100%) |
-| lgbm_quantile | £174 (27%) | £82 (20%) | £33 (12%) | £3 (3%) |
-| lgbm_risk_aware | £174 (27%) | £82 (20%) | £33 (12%) | £3 (3%) |
+| lgbm_risk_aware | £175 (28%) | £79 (19%) | £35 (13%) | £6 (5%) |
+| lgbm_quantile | £163 (26%) | £73 (18%) | £34 (13%) | £2 (2%) |
 | seasonal_naive | £7 (1%) | -£135 (-32%) | -£149 (-55%) | -£122 (-99%) |
 | naive_last_day | -£2 (-0%) | -£145 (-35%) | -£155 (-57%) | -£122 (-100%) |
 
@@ -53,42 +53,42 @@ the pessimistic end of the forecast range. It still settles at actual prices. α
 p50 strategy.
 
 α was chosen on the validation window 2025-04-21 to 2025-10-19 (before the test
-window): **α = 0**.
+window): **α = 0.25**.
 
 Validation window (used to choose α):
 
 | alpha | gbp_per_year | pct_of_perfect |
 |---|---|---|
-| alpha=0 | 24.58 | 10.30 |
-| alpha=0.25 | 23.00 | 9.64 |
-| alpha=0.5 | 7.37 | 3.09 |
-| alpha=0.75 | 0.37 | 0.15 |
+| alpha=0 | 28.47 | 11.93 |
+| alpha=0.25 | 29.41 | 12.33 |
+| alpha=0.5 | 6.56 | 2.75 |
+| alpha=0.75 | 0.00 | 0.00 |
 | alpha=1 | 0.00 | 0.00 |
 
 Test window, all α (hindsight, shown for transparency only; not used to choose):
 
 | alpha | gbp_per_year | pct_of_perfect |
 |---|---|---|
-| alpha=0 | 32.55 | 12.02 |
-| alpha=0.25 | 27.88 | 10.30 |
-| alpha=0.5 | 12.61 | 4.66 |
-| alpha=0.75 | 3.30 | 1.22 |
+| alpha=0 | 33.93 | 12.53 |
+| alpha=0.25 | 34.56 | 12.77 |
+| alpha=0.5 | 12.48 | 4.61 |
+| alpha=0.75 | 3.86 | 1.42 |
 | alpha=1 | 0.00 | 0.00 |
 
-## Worst 10 days for `lgbm_quantile` (£ short of perfect foresight)
+## Worst 10 days for `lgbm_risk_aware` (£ short of perfect foresight)
 
-| target_date | perfect_gbp | lgbm_quantile_gbp | shortfall_gbp |
+| target_date | perfect_gbp | lgbm_risk_aware_gbp | shortfall_gbp |
 |---|---|---|---|
 | 2026-06-23 | 5.52 | 0.00 | 5.52 |
-| 2026-01-05 | 4.44 | 0.86 | 3.58 |
+| 2026-01-05 | 4.44 | 0.00 | 4.44 |
 | 2026-01-08 | 3.19 | 0.00 | 3.19 |
-| 2026-09-15 | 2.96 | -0.23 | 3.18 |
-| 2026-10-04 | 1.97 | -0.60 | 2.56 |
-| 2026-09-07 | 2.30 | -0.03 | 2.32 |
-| 2026-09-30 | 2.43 | 0.21 | 2.21 |
-| 2026-04-06 | 2.03 | -0.16 | 2.19 |
-| 2026-09-22 | 2.20 | 0.08 | 2.12 |
-| 2026-03-29 | 1.27 | -0.79 | 2.06 |
+| 2026-09-15 | 2.96 | 0.00 | 2.96 |
+| 2026-10-04 | 1.97 | -0.44 | 2.40 |
+| 2026-09-22 | 2.20 | -0.13 | 2.33 |
+| 2026-09-30 | 2.43 | 0.20 | 2.23 |
+| 2026-09-07 | 2.30 | 0.13 | 2.17 |
+| 2026-04-06 | 2.03 | 0.00 | 2.03 |
+| 2026-03-15 | 1.89 | 0.00 | 1.89 |
 
 ## Caveats
 
