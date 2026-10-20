@@ -103,13 +103,17 @@ Storage goes through **fsspec** (`file://` and `gs://` via `gcsfs`), so switchin
 ```
 src/flexcast/
   config.py        # pydantic-settings; profiles via env
-  storage.py       # fsspec-backed read/write of Parquet + JSON
-  sources/         # elexon.py, octopus.py — thin httpx clients; base URLs from config
+  storage.py       # fsspec-backed read/write of Parquet, text and bytes
+  settlement.py    # the one UTC <-> settlement date/period helper
+  sources/         # http.py (retry, chunking, validation), elexon.py, octopus.py; base URLs from config
   ingest.py        # pull → validate → write partitions; idempotent
+  prices.py        # load one complete day of known prices (system or Agile)
+  history.py       # in-memory history with per-source availability; the only gate to features
   features.py      # point-in-time feature build for a decision_time
-  models/          # baselines.py, lgbm.py — common fit/predict interface
-  optimise.py      # battery LP
-  backtest.py      # rolling-origin backtest + £ valuation
+  models/          # base.py (interface, save/load), baselines.py, lgbm.py, registry.py
+  optimise.py      # battery MILP (separate buy/sell prices for risk-aware planning)
+  backtest.py      # rolling-origin backtest, £ valuation, risk-aware alpha selection
+  report.py        # docs/results.md + results.png
   api.py           # FastAPI
   telemetry.py     # Stage 6: publisher (simulated fleet) + consumer
   cli.py           # typer entrypoints
@@ -174,7 +178,7 @@ Each stage has a **learning goal**, a **build** list, **acceptance** criteria, a
 - **Leakage test (required):** every feature's source publish time < decision_time.
 - Rolling-origin backtest ≥ 12 months: retrain weekly, forecast daily. Each day: optimise on forecast → settle at actuals. Same for perfect foresight and baselines.
 - Output: £/battery/year, % of perfect foresight captured, MAE, pinball loss, worst 10 days; fleet scaling for 1k/10k/100k batteries (price-impact caveat). Results → `docs/results.md` with one chart.
-- Stretch: does a risk-aware schedule (p10/p90) beat p50 in £?
+- Risk-aware schedule: plan buying at p50 + α(p90 − p50) and selling at p50 − α(p50 − p10); α chosen on a validation window before the test window (never on the test window). Does it beat p50 in £?
 **Accept:** leakage test passes; models round-trip through serialisation; `flexcast backtest` reproduces the table from a clean checkout.
 **Check yourself:** Which feature, if accidentally taken from the latest vintage, would inflate results most? Why might a lower-MAE model capture less £?
 

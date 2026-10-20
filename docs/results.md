@@ -17,6 +17,7 @@ copyright and database right.
 |---|---|---|---|---|---|
 | perfect | 365 | 270.73 | 100.00 | 0.00 | 0.00 |
 | lgbm_quantile | 365 | 32.55 | 12.02 | 30.59 | 9.79 |
+| lgbm_risk_aware | 365 | 32.55 | 12.02 | 30.59 | 9.79 |
 | naive_last_day | 365 | -148.66 | -54.91 | 44.31 | 22.15 |
 | seasonal_naive | 365 | -154.79 | -57.17 | 45.45 | 22.72 |
 
@@ -27,6 +28,7 @@ copyright and database right.
 | strategy | 1,000 batteries (£k/yr) | 10,000 batteries (£k/yr) | 100,000 batteries (£k/yr) |
 |---|---|---|---|
 | lgbm_quantile | 33 | 326 | 3255 |
+| lgbm_risk_aware | 33 | 326 | 3255 |
 | naive_last_day | -149 | -1487 | -14866 |
 | seasonal_naive | -155 | -1548 | -15479 |
 
@@ -39,8 +41,39 @@ trades against, so the 100k figure is an upper bound.
 |---|---|---|---|---|
 | perfect | £634 (100%) | £416 (100%) | £271 (100%) | £123 (100%) |
 | lgbm_quantile | £174 (27%) | £82 (20%) | £33 (12%) | £3 (3%) |
+| lgbm_risk_aware | £174 (27%) | £82 (20%) | £33 (12%) | £3 (3%) |
 | seasonal_naive | £7 (1%) | -£135 (-32%) | -£149 (-55%) | -£122 (-99%) |
 | naive_last_day | -£2 (-0%) | -£145 (-35%) | -£155 (-57%) | -£122 (-100%) |
+
+## Risk-aware scheduling
+
+`lgbm_risk_aware` uses the `lgbm_quantile` forecast but plans as if buying at
+p50 + α·(p90 − p50) and selling at p50 − α·(p50 − p10), so it only trades when a spread survives
+the pessimistic end of the forecast range. It still settles at actual prices. α = 0 is the plain
+p50 strategy.
+
+α was chosen on the validation window 2025-04-21 to 2025-10-19 (before the test
+window): **α = 0**.
+
+Validation window (used to choose α):
+
+| alpha | gbp_per_year | pct_of_perfect |
+|---|---|---|
+| alpha=0 | 24.58 | 10.30 |
+| alpha=0.25 | 23.00 | 9.64 |
+| alpha=0.5 | 7.37 | 3.09 |
+| alpha=0.75 | 0.37 | 0.15 |
+| alpha=1 | 0.00 | 0.00 |
+
+Test window, all α (hindsight, shown for transparency only; not used to choose):
+
+| alpha | gbp_per_year | pct_of_perfect |
+|---|---|---|
+| alpha=0 | 32.55 | 12.02 |
+| alpha=0.25 | 27.88 | 10.30 |
+| alpha=0.5 | 12.61 | 4.66 |
+| alpha=0.75 | 3.30 | 1.22 |
+| alpha=1 | 0.00 | 0.00 |
 
 ## Worst 10 days for `lgbm_quantile` (£ short of perfect foresight)
 

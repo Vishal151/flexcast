@@ -109,7 +109,7 @@ def backtest(
 ) -> None:
     """Rolling-origin backtest of all models; writes the report and the last LightGBM model."""
     from flexcast import report
-    from flexcast.backtest import BacktestConfig, run, sensitivity, summarise
+    from flexcast.backtest import BacktestConfig, add_risk_aware, run, sensitivity, summarise
     from flexcast.history import History
     from flexcast.models.base import save_model
     from flexcast.models.baselines import NaiveLastDay, SeasonalNaive
@@ -134,6 +134,9 @@ def backtest(
             "lgbm_quantile": LGBMQuantile,
         },
     )
+    risk = add_risk_aware(
+        result, cfg.battery, "lgbm_quantile", (0.0, 0.25, 0.5, 0.75, 1.0), "lgbm_risk_aware"
+    )
     sens = sensitivity(result.forecasts, cfg.battery, (0.0, 0.01, 0.02, 0.04))
     summary = summarise(result.daily)
 
@@ -149,10 +152,12 @@ def backtest(
             "train_window": [str(d) for d in result.train_window],
             "features": list(history_features()),
             "backtest": summary.loc["lgbm_quantile"].round(4).to_dict(),
+            "risk_alpha": risk.alpha,
+            "backtest_risk_aware": summary.loc[risk.strategy].round(4).to_dict(),
             "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
         },
     )
-    report.write(Storage(report_uri), result, cfg, sens, best_model="lgbm_quantile")
+    report.write(Storage(report_uri), result, cfg, sens, risk)
     typer.echo(summary.round(2).to_string())
 
 

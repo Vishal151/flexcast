@@ -36,12 +36,20 @@ class BacktestConfig:
     retrain_every_days: int = 7
     decision_at: time = time(9)
     battery: Battery = field(default_factory=Battery)
+    # Days before test_start that are forecast the same way and used only to choose settings
+    # (e.g. the risk-aware alpha), so nothing is tuned on the test window.
+    validation_days: int = 182
+
+    @property
+    def forecast_start(self) -> date:
+        return self.test_start - timedelta(days=self.validation_days)
 
 
 @dataclass
 class BacktestResult:
-    forecasts: pd.DataFrame  # target_date, start_time, strategy, p10, p50, p90, actual
-    daily: pd.DataFrame  # target_date, strategy, value_gbp, mae, pinball
+    forecasts: pd.DataFrame  # test window: target_date, start_time, strategy, p10..p90, actual
+    validation_forecasts: pd.DataFrame  # same columns, validation window
+    daily: pd.DataFrame  # test window: target_date, strategy, value_gbp, mae, pinball
     models: dict[str, Model]  # as last trained
     train_window: tuple[date, date]  # of the last retrain
     skipped: list[date]
@@ -100,7 +108,7 @@ def run(
     train_window = (cfg.train_start, cfg.train_start)
     rows: list[pd.DataFrame] = []
 
-    for d in days_between(cfg.test_start, cfg.test_end):
+    for d in days_between(cfg.forecast_start, cfg.test_end):
         decision_time = decision_time_for(d, cfg.decision_at)
         if last_fit is None or (d - last_fit).days >= cfg.retrain_every_days:
             cutoff = training_cutoff(decision_time)
@@ -120,9 +128,12 @@ def run(
         for name, p in preds.items():
             rows.append(p.assign(actual=actual, strategy=name, target_date=d).reset_index())
 
-    forecasts = pd.concat(rows, ignore_index=True)
+    every = pd.concat(rows, ignore_index=True)
+    is_test = every["target_date"] >= cfg.test_start
+    forecasts = every[is_test].reset_index(drop=True)
     return BacktestResult(
         forecasts=forecasts,
+        validation_forecasts=every[~is_test].reset_index(drop=True),
         daily=valuate(forecasts, cfg.battery),
         models=models,
         train_window=train_window,
@@ -131,11 +142,16 @@ def run(
 
 
 def valuate(forecasts: pd.DataFrame, battery: Battery) -> pd.DataFrame:
-    """Optimise on each (day, strategy) p50 and settle at actuals."""
+    """Optimise each (day, strategy) and settle at actuals.
+
+    The schedule is planned on `buy`/`sell` columns where present (risk-aware rows), else p50.
+    """
     out = []
     for (d, strategy), g in forecasts.groupby(["target_date", "strategy"], sort=True):
         g = g.set_index("start_time")
-        schedule = optimise(g["p50"], battery)
+        buy = g["buy"] if "buy" in g and g["buy"].notna().all() else g["p50"]
+        sell = g["sell"] if "sell" in g and g["sell"].notna().all() else g["p50"]
+        schedule = optimise(buy, battery, sell_prices=sell)
         out.append(
             {
                 "target_date": d,
@@ -194,3 +210,69 @@ def sensitivity(
         ]
         index = s.index
     return pd.DataFrame(cols, index=index)
+
+
+def with_risk_aware(
+    forecasts: pd.DataFrame, strategy: str, alpha: float, name: str
+) -> pd.DataFrame:
+    """Append a risk-aware copy of `strategy`: plan buying at p50 + alpha*(p90-p50) and selling
+    at p50 - alpha*(p50-p10). alpha=0 is the p50 strategy; alpha=1 plans at p90/p10. A trade
+    then happens only if it pays even when prices land at the pessimistic end of the range."""
+    base = forecasts[forecasts["strategy"] == strategy]
+    risk = base.assign(
+        strategy=name,
+        buy=base["p50"] + alpha * (base["p90"] - base["p50"]),
+        sell=base["p50"] - alpha * (base["p50"] - base["p10"]),
+    )
+    return pd.concat([forecasts, risk], ignore_index=True)
+
+
+def alpha_grid(
+    forecasts: pd.DataFrame, battery: Battery, strategy: str, alphas: tuple[float, ...]
+) -> pd.DataFrame:
+    """£/battery/year and % of perfect for `strategy` at each alpha."""
+    rows = {}
+    keep = forecasts["strategy"].isin([strategy, PERFECT])
+    for a in alphas:
+        name = f"alpha={a:g}"
+        daily = valuate(with_risk_aware(forecasts[keep], strategy, a, name), battery)
+        s = summarise(daily).loc[name]
+        rows[name] = {"gbp_per_year": s["gbp_per_year"], "pct_of_perfect": s["pct_of_perfect"]}
+    return pd.DataFrame.from_dict(rows, orient="index").rename_axis("alpha")
+
+
+def select_alpha(
+    validation_forecasts: pd.DataFrame,
+    battery: Battery,
+    strategy: str,
+    alphas: tuple[float, ...],
+) -> tuple[float, pd.DataFrame]:
+    """The alpha with the most £ on the validation window (ties -> smallest alpha)."""
+    grid = alpha_grid(validation_forecasts, battery, strategy, alphas)
+    best = grid["gbp_per_year"].to_numpy().argmax()
+    return alphas[best], grid
+
+
+@dataclass(frozen=True)
+class RiskAware:
+    strategy: str  # the new strategy's name
+    base: str  # the strategy it adjusts
+    alpha: float  # chosen on the validation window
+    validation_grid: pd.DataFrame
+    test_grid: pd.DataFrame  # hindsight only; never used for the choice
+
+
+def add_risk_aware(
+    result: BacktestResult,
+    battery: Battery,
+    base: str,
+    alphas: tuple[float, ...],
+    name: str,
+) -> RiskAware:
+    """Choose alpha on validation days, then add `name` to the test results at that alpha."""
+    alpha, val_grid = select_alpha(result.validation_forecasts, battery, base, alphas)
+    test_grid = alpha_grid(result.forecasts, battery, base, alphas)
+    result.forecasts = with_risk_aware(result.forecasts, base, alpha, name)
+    risk_rows = result.forecasts[result.forecasts["strategy"] == name]
+    result.daily = pd.concat([result.daily, valuate(risk_rows, battery)], ignore_index=True)
+    return RiskAware(name, base, alpha, val_grid, test_grid)

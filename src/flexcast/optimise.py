@@ -76,8 +76,14 @@ def _solved(v: float | None) -> float:
     return float(v)
 
 
-def optimise(prices: pd.Series, battery: Battery | None = None) -> Schedule:
+def optimise(
+    prices: pd.Series, battery: Battery | None = None, sell_prices: pd.Series | None = None
+) -> Schedule:
     """Maximise settle(...) subject to the battery's physical limits.
+
+    `prices` are paid when charging and `sell_prices` (default: the same) earned when
+    discharging. Different series let a risk-aware caller plan with a pessimistic buy price and
+    a pessimistic sell price; settlement still happens at the actual price.
 
     A MILP rather than a pure LP: one binary per period forbids charging and discharging at
     once. Without it, at very negative prices the solver can cycle energy through the round-trip
@@ -85,8 +91,12 @@ def optimise(prices: pd.Series, battery: Battery | None = None) -> Schedule:
     """
     b = battery or Battery()
     idx = _validate(prices)
-    price = prices.to_numpy(dtype=float) / 1000  # £/MWh -> £/kWh
-    periods = range(len(price))
+    sell_prices = prices if sell_prices is None else sell_prices
+    if not sell_prices.index.equals(idx) or sell_prices.isna().any():
+        raise ValueError("sell_prices must have the same index as prices and no NaN")
+    buy = prices.to_numpy(dtype=float) / 1000  # £/MWh -> £/kWh
+    sell = sell_prices.to_numpy(dtype=float) / 1000
+    periods = range(len(buy))
 
     prob = pulp.LpProblem("battery", pulp.LpMaximize)
     # Bounds on the variables carry the power and SoC limits.
@@ -97,7 +107,7 @@ def optimise(prices: pd.Series, battery: Battery | None = None) -> Schedule:
 
     # Objective: the same £ formula as settle(), term by term.
     prob += pulp.lpSum(
-        price[t] * (discharge[t] - charge[t]) * DT_H
+        (sell[t] * discharge[t] - buy[t] * charge[t]) * DT_H
         - b.degradation_gbp_per_kwh * (charge[t] + discharge[t]) * DT_H
         for t in periods
     )

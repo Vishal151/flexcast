@@ -128,3 +128,35 @@ def test_no_simultaneous_charge_and_discharge_at_very_negative_prices() -> None:
     f = optimise(day_prices([-1000.0] * 48), b).frame
     both = (f["charge_kw"] > TOL) & (f["discharge_kw"] > TOL)
     assert not both.any()
+
+
+# --- separate buy/sell prices (risk-aware scheduling) ----------------------------------------
+
+
+def test_sell_prices_default_to_prices() -> None:
+    prices = day_prices(spiky_prices())
+    a, b = optimise(prices), optimise(prices, sell_prices=prices)
+    pd.testing.assert_frame_equal(a.frame, b.frame)
+    assert a.objective_gbp == pytest.approx(b.objective_gbp)
+
+
+def test_pessimistic_spread_wider_than_signal_means_no_trading() -> None:
+    """A £1200 buy/sell gap exceeds the largest spread in spiky_prices (spikes reach £900)."""
+    prices = day_prices(spiky_prices())
+    f = optimise(prices + 600, sell_prices=prices - 600).frame
+    assert f["charge_kw"].abs().max() < TOL and f["discharge_kw"].abs().max() < TOL
+
+
+def test_hand_solvable_buy_sell_spread() -> None:
+    """Ideal battery as test_hand_solvable_ideal_battery, but buying costs £10/MWh more and
+    selling earns £10/MWh less: 10 kWh * (0.09 - 0.01) = £0.80."""
+    b = Battery(round_trip_efficiency=1.0, degradation_gbp_per_kwh=0.0, initial_soc_kwh=0.0)
+    p = two_price(0.0, 100.0)
+    s = optimise(p + 10, b, sell_prices=p - 10)
+    assert s.objective_gbp == pytest.approx(0.80, abs=1e-4)
+
+
+def test_sell_prices_must_align() -> None:
+    prices = day_prices(spiky_prices())
+    with pytest.raises(ValueError, match="sell_prices"):
+        optimise(prices, sell_prices=prices.iloc[:-1])
