@@ -182,6 +182,15 @@ Each stage has a **learning goal**, a **build** list, **acceptance** criteria, a
 **Accept:** leakage test passes; models round-trip through serialisation; `flexcast backtest` reproduces the table from a clean checkout.
 **Check yourself:** Which feature, if accidentally taken from the latest vintage, would inflate results most? Why might a lower-MAE model capture less £?
 
+### Stage 2c — Model development, notebook-led (added after Stage 4)
+**Learn:** how forecasting models are actually developed: exploration, error analysis, domain-driven features, tuning and calibration without touching the test set, and choosing the market the battery really trades in.
+**Build:**
+- `notebooks/`: jupytext-paired notebooks (`.py` percent format for review, `.ipynb` with outputs for reading). They import `src/flexcast`; findings move into the library and the backtest. `make notebooks` re-executes them.
+- Lightweight experiment log in the repo (`experiments/log.jsonl` + generated table): settings, data window, git SHA, £ and accuracy metrics. No MLflow.
+- Checkpoints: (A) explore prices + diagnose the current model; (B) embedded solar forecast as an input (NESO, vintaged); (C) hyperparameter tuning and quantile calibration on the validation window; (D) day-ahead auction framing (N2EX prices) with the imbalance price as a later layer, once the auction publish time is established.
+**Accept:** each checkpoint has a notebook that reads top to bottom, a log entry, passing tests (leakage test covers every new input), and an updated `docs/results.md`; the test window is only used to report, never to choose.
+**Check yourself:** Which input moved £ most, and why? Why must calibration be fitted on validation, not test? Which market should a home battery trade in, and what does that change about the decision time?
+
 ### Stage 3 — Containerise and emulate GCP locally (1 day)
 **Learn:** Docker multi-stage builds; compose; env-driven config; emulators; integration testing.
 **Build:**

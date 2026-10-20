@@ -44,4 +44,10 @@ demo:
 	$(DEMO_RUN) plan --date 2025-06-11
 	@echo "API: http://localhost:8080/docs  e.g. /schedule?date=2025-06-11"
 
-.PHONY: lint test ingest backtest docker up down itest live demo
+# Re-run the model-development notebooks (needs the ./data backfill and a backtest run).
+# The .py files are the source; jupytext syncs them into .ipynb, which keep the outputs.
+notebooks:
+	uv run jupytext --sync notebooks/*.py
+	uv run jupyter nbconvert --to notebook --execute --inplace notebooks/*.ipynb
+
+.PHONY: lint test ingest backtest docker up down itest live demo notebooks

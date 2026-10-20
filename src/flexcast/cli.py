@@ -106,6 +106,10 @@ def backtest(
     test_end: Annotated[str | None, typer.Option(help="Default: last day with prices")] = None,
     train_start: Annotated[str | None, typer.Option(help="Default: first day with prices")] = None,
     report_uri: Annotated[str, typer.Option(help="Where results.md/png go")] = "file://./docs",
+    experiment: Annotated[
+        str | None, typer.Option(help="Log this run to experiments/ under this name")
+    ] = None,
+    description: Annotated[str, typer.Option(help="One line for the experiment log")] = "",
 ) -> None:
     """Rolling-origin backtest of all models; writes the report and the last LightGBM model."""
     from flexcast import report
@@ -158,6 +162,24 @@ def backtest(
         },
     )
     report.write(Storage(report_uri), result, cfg, sens, risk)
+    if experiment:
+        from flexcast.experiments import log_experiment
+        from flexcast.models.lgbm import NUM_ROUNDS, PARAMS
+
+        log_experiment(
+            Storage("file://./experiments"),
+            experiment,
+            description,
+            {
+                "lgbm": {**PARAMS, "num_rounds": NUM_ROUNDS},
+                "features": history_features(),
+                "risk_alpha": risk.alpha,
+                "battery": vars(cfg.battery),
+            },
+            {str(k): v for k, v in summary.loc["lgbm_quantile"].round(4).items()},
+            window=f"{cfg.test_start}..{cfg.test_end}",
+            git_sha=settings.git_sha,
+        )
     typer.echo(summary.round(2).to_string())
 
 

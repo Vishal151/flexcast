@@ -114,12 +114,14 @@ def test_summarise_and_worst_days_hand_values() -> None:
             "value_gbp": [2.0, 4.0, 1.0, 2.0],
             "mae": [0.0, 0.0, 10.0, 20.0],
             "pinball": [0.0, 0.0, 1.0, 3.0],
+            "coverage_80": [1.0, 1.0, 0.5, 0.7],
         }
     )
     s = summarise(daily)
     assert s.loc["m", "pct_of_perfect"] == pytest.approx(50.0)
     assert s.loc["m", "gbp_per_year"] == pytest.approx(1.5 * 365)
     assert s.loc["m", "mae"] == 15.0 and s.loc["m", "pinball"] == 2.0
+    assert s["coverage_80"]["m"] == pytest.approx(0.6)
     w = worst_days(daily, "m", n=1)
     assert list(w.index) == [date(2025, 1, 2)] and w["shortfall_gbp"].iloc[0] == 2.0
 

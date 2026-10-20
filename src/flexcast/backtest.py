@@ -161,6 +161,7 @@ def valuate(forecasts: pd.DataFrame, battery: Battery) -> pd.DataFrame:
                 "value_gbp": settle(schedule.frame, g["actual"], battery),
                 "mae": float((g["p50"] - g["actual"]).abs().mean()),
                 "pinball": pinball_loss(g["actual"], g[COLUMNS]),
+                "coverage_80": float(g["actual"].between(g["p10"], g["p90"]).mean()),
             }
         )
     return pd.DataFrame(out)
@@ -180,6 +181,7 @@ def summarise(daily: pd.DataFrame) -> pd.DataFrame:
                 "pct_of_perfect": 100 * g["value_gbp"].sum() / pf.reindex(g.index).sum(),
                 "mae": g["mae"].mean(),
                 "pinball": g["pinball"].mean(),
+                "coverage_80": g["coverage_80"].mean(),
             }
         )
     out = pd.DataFrame(rows).set_index("strategy")

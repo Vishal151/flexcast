@@ -13,13 +13,13 @@ copyright and database right.
 
 ## Summary
 
-| strategy | days | £/battery/year | % of perfect | MAE £/MWh | pinball |
-|---|---|---|---|---|---|
-| perfect | 365 | 270.73 | 100.00 | 0.00 | 0.00 |
-| lgbm_quantile | 365 | 32.55 | 12.02 | 30.59 | 9.79 |
-| lgbm_risk_aware | 365 | 32.55 | 12.02 | 30.59 | 9.79 |
-| naive_last_day | 365 | -148.66 | -54.91 | 44.31 | 22.15 |
-| seasonal_naive | 365 | -154.79 | -57.17 | 45.45 | 22.72 |
+| strategy | days | £/battery/year | % of perfect | MAE £/MWh | pinball | p10-p90 coverage |
+|---|---|---|---|---|---|---|
+| perfect | 365 | 270.73 | 100.00 | 0.00 | 0.00 | 1.00 |
+| lgbm_quantile | 365 | 32.55 | 12.02 | 30.59 | 9.79 | 0.66 |
+| lgbm_risk_aware | 365 | 32.55 | 12.02 | 30.59 | 9.79 | 0.66 |
+| naive_last_day | 365 | -148.66 | -54.91 | 44.31 | 22.15 | 0.00 |
+| seasonal_naive | 365 | -154.79 | -57.17 | 45.45 | 22.72 | 0.00 |
 
 ![Cumulative £ by strategy](results.png)
 

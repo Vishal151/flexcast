@@ -73,6 +73,7 @@ def render(
             "pct_of_perfect": "% of perfect",
             "mae": "MAE £/MWh",
             "pinball": "pinball",
+            "coverage_80": "p10-p90 coverage",
         }
     )
     fleet = pd.DataFrame(
