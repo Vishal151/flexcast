@@ -87,11 +87,8 @@ Sample days: normal `2025-06-11` (48 periods), spring DST `2025-03-30` (46), aut
 
 _To be filled in after the Stage 0 "check yourself" discussion._
 
-## Proposed SPEC §2 edits
-1. WINDFOR is hourly; note upsampling to half-hourly.
-2. MID: use `APXMIDP` (N2EX has gaps).
-3. NDF/WINDFOR publish-window queries are capped at 1 day.
-4. TEMP is daily; keep it optional, low priority.
+## SPEC §2 edits (applied)
+WINDFOR hourly, MID provider `APXMIDP`, 1-day publish-window cap, MID instants, TEMP daily/low priority.
 
 ## Attribution
 Contains BMRS data © Elexon Limited copyright and database right.

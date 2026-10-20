@@ -33,11 +33,11 @@ All public, free, no key. **Stage 0 must verify every path below against the liv
 | Source | What | Notes |
 |---|---|---|
 | Elexon Insights API `https://data.elexon.co.uk/bmrs/api/v1` | System prices (SSP/SBP) — `/balancing/settlement/system-prices/{settlementDate}` | Forecast target. Store both prices. |
-| Elexon dataset `MID` | Market Index price | Feature (lagged) and alternative target |
+| Elexon dataset `MID` | Market Index price | Feature (lagged) and alternative target. Use provider `APXMIDP`; `N2EXMIDP` has missing periods |
 | Elexon dataset `NDF` | Day-ahead national demand forecast | Feature. Must use the vintage published **before** decision time |
-| Elexon dataset `WINDFOR` | Wind generation forecast | Feature. Same vintage rule |
+| Elexon dataset `WINDFOR` | Wind generation forecast | Feature. Same vintage rule. **Hourly** resolution: upsample to half-hourly in features |
 | Elexon dataset `FUELHH` | Half-hourly generation by fuel | Feature (lagged) / EDA |
-| Elexon dataset `TEMP` | Temperature | Feature (optional) |
+| Elexon dataset `TEMP` | Temperature | Feature (optional, low priority). **Daily** resolution, one row per day |
 | Octopus API `https://api.octopus.energy/v1/products/` | Agile half-hourly unit rates | Stage 1 only — known prices to validate optimiser. Discover current Agile product code via `/products`; don't hardcode. |
 
 OpenAPI definitions: https://developer.data.elexon.co.uk/ — dataset endpoints support querying by **publish time**, which is how we get point-in-time forecast vintages.
@@ -48,6 +48,8 @@ Attribution required in README: "Contains BMRS data © Elexon Limited copyright 
 - **Settlement periods**: 48 per day normally, **46** on spring DST day, **50** on autumn DST day. Store timestamps in UTC; derive settlement date/period, never the reverse by arithmetic.
 - **Agile day-ahead rates** publish ~16:00 London; before then today's query returns <48 rows.
 - **Forecast vintages**: for each target day, keep only forecasts with `publishTime < decision_time`. Using the latest revision is leakage.
+- **Query window cap**: `NDF`/`WINDFOR` publish-time queries are capped at 1 day per request; clients must chunk.
+- **MID `from`/`to` are instants**, not dates: query with the London-day UTC bounds.
 - Prices can be **negative** and **spiky**. Don't clip in storage; decide clipping in modelling, explicitly.
 
 ---

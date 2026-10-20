@@ -1,1 +1,10 @@
-{"data":[{"dataset":"TEMP","measurementDate":"2025-06-11","publishTime":"2025-06-11T15:45:00Z","temperature":16.6}]}
+{
+  "data": [
+    {
+      "dataset": "TEMP",
+      "measurementDate": "2025-06-11",
+      "publishTime": "2025-06-11T15:45:00Z",
+      "temperature": 16.6
+    }
+  ]
+}
