@@ -72,8 +72,8 @@ Sample days: normal `2025-06-11` (48 periods), spring DST `2025-03-30` (46), aut
 
 ### Agile unit rates (Stage 1 optimiser validation only) — verified
 - Discover the product: `GET /products/?available_at=<utc>` and filter codes containing `AGILE` with
-  `direction == IMPORT`. Current import product: `AGILE-24-10-01`. Others in the listing: `AGILE-BB-*` (business),
-  `AGILE-OUTGOING-*` (export).
+  `direction == IMPORT`. Current import product: `AGILE-24-10-01`. Also filter `brand == OCTOPUS_ENERGY`: `AGILE-BB-*` is the
+  same tariff under the Bulb brand (not business). `AGILE-OUTGOING-*` is export.
 - Tariff code per region: `GET /products/{code}/` → `single_register_electricity_tariffs._C.direct_debit_monthly.code`
   = `E-1R-AGILE-24-10-01-C` (region C = London).
 - Rates: `GET /products/{code}/electricity-tariffs/{tariff}/standard-unit-rates/?period_from=<utc>&period_to=<utc>`

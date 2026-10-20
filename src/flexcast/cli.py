@@ -1,0 +1,98 @@
+"""`flexcast <command>` entrypoints. One image, many commands."""
+
+import logging
+from datetime import UTC, date, datetime, timedelta
+from typing import Annotated
+
+import pandas as pd
+import typer
+
+from flexcast.config import Settings
+from flexcast.ingest import DATASETS, Ingester, default_range
+from flexcast.optimise import Battery
+from flexcast.optimise import optimise as run_optimiser
+from flexcast.prices import PriceSource, load_day_prices
+from flexcast.settlement import LONDON
+from flexcast.sources.elexon import ElexonClient
+from flexcast.sources.octopus import OctopusClient
+from flexcast.storage import Storage
+
+app = typer.Typer(no_args_is_help=True, add_completion=False)
+
+
+@app.callback()
+def main(verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False) -> None:
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+@app.command()
+def ingest(
+    start: Annotated[str | None, typer.Option(help="First London day, YYYY-MM-DD")] = None,
+    end: Annotated[str | None, typer.Option(help="Last London day (inclusive)")] = None,
+    datasets: Annotated[str | None, typer.Option(help="Comma-separated subset")] = None,
+) -> None:
+    """Ingest upstream data for London days START..END (default: yesterday and today)."""
+    settings = Settings()
+    first, last = default_range(datetime.now(UTC))
+    first = date.fromisoformat(start) if start else first
+    last = date.fromisoformat(end) if end else last
+    names = datasets.split(",") if datasets else list(DATASETS)
+    if unknown := set(names) - DATASETS.keys():
+        raise typer.BadParameter(f"unknown datasets: {sorted(unknown)}")
+    ingester = Ingester(
+        Storage(settings.data_uri),
+        ElexonClient(settings.elexon_base_url),
+        OctopusClient(settings.octopus_base_url),
+        region=settings.agile_region,
+    )
+    failed = ingester.run(first, last, names, concurrency=settings.http_concurrency)
+    if failed:
+        typer.echo(f"failed days ({len(failed)}): {', '.join(map(str, failed))}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def optimise(
+    day: Annotated[str, typer.Option("--date", help="London settlement day, YYYY-MM-DD")],
+    end: Annotated[
+        str | None, typer.Option(help="Last day (inclusive) to sum over a range")
+    ] = None,
+    prices: Annotated[str, typer.Option(help="system | agile")] = "agile",
+) -> None:
+    """Optimise one battery on known prices. One day prints the schedule; a range prints £."""
+    if prices not in ("system", "agile"):
+        raise typer.BadParameter("prices must be 'system' or 'agile'")
+    source: PriceSource = "system" if prices == "system" else "agile"
+    storage = Storage(Settings().data_uri)
+    first = date.fromisoformat(day)
+    last = date.fromisoformat(end) if end else first
+    battery = Battery()
+
+    if first == last:
+        s = run_optimiser(load_day_prices(storage, source, first), battery)
+        f = s.frame.copy()
+        f.index = pd.DatetimeIndex(f.index).tz_convert(LONDON).strftime("%H:%M")
+        typer.echo(f.round(2).to_string())
+        typer.echo(f"\n{first} {prices}: £{s.objective_gbp:.2f}")
+        return
+
+    values: dict[date, float] = {}
+    skipped: list[date] = []
+    for i in range((last - first).days + 1):
+        d = first + timedelta(days=i)
+        try:
+            values[d] = run_optimiser(load_day_prices(storage, source, d), battery).objective_gbp
+        except (FileNotFoundError, ValueError):
+            skipped.append(d)
+    v = pd.Series(values)
+    typer.echo(
+        f"{prices} {first}..{last}: {len(v)} days, £{v.sum():.2f} total, "
+        f"£{v.mean():.3f}/day mean, £{v.mean() * 365:.0f}/year annualised"
+    )
+    typer.echo(f"best day {v.idxmax()} £{v.max():.2f}; worst day {v.idxmin()} £{v.min():.2f}")
+    if skipped:
+        typer.echo(f"skipped {len(skipped)} incomplete/missing days: {skipped[:5]}...", err=True)

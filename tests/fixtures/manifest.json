@@ -1,5 +1,5 @@
 {
-  "recorded_at": "2026-10-20T10:24:31+00:00",
+  "recorded_at": "2026-10-20T11:00:26+00:00",
   "base_urls": {
     "elexon": "https://data.elexon.co.uk/bmrs/api/v1",
     "octopus": "https://api.octopus.energy/v1"
@@ -37,6 +37,17 @@
       },
       "file": "elexon/fuelhh_normal.json",
       "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "octopus_products_normal",
+      "source": "octopus",
+      "method": "GET",
+      "path": "/products/",
+      "params": {
+        "available_at": "2025-06-10T23:00Z"
+      },
+      "file": "octopus/octopus_products_normal.json",
+      "content_type": "application/json"
     },
     {
       "label": "agile_normal",
@@ -132,6 +143,17 @@
       "content_type": "application/json; charset=utf-8"
     },
     {
+      "label": "octopus_products_spring_dst",
+      "source": "octopus",
+      "method": "GET",
+      "path": "/products/",
+      "params": {
+        "available_at": "2025-03-30T00:00Z"
+      },
+      "file": "octopus/octopus_products_spring_dst.json",
+      "content_type": "application/json"
+    },
+    {
       "label": "agile_spring_dst",
       "source": "octopus",
       "method": "GET",
@@ -225,6 +247,17 @@
       "content_type": "application/json; charset=utf-8"
     },
     {
+      "label": "octopus_products_autumn_dst",
+      "source": "octopus",
+      "method": "GET",
+      "path": "/products/",
+      "params": {
+        "available_at": "2025-10-25T23:00Z"
+      },
+      "file": "octopus/octopus_products_autumn_dst.json",
+      "content_type": "application/json"
+    },
+    {
       "label": "agile_autumn_dst",
       "source": "octopus",
       "method": "GET",
@@ -295,17 +328,6 @@
       },
       "file": "elexon/temp_normal.json",
       "content_type": "application/json; charset=utf-8"
-    },
-    {
-      "label": "octopus_products",
-      "source": "octopus",
-      "method": "GET",
-      "path": "/products/",
-      "params": {
-        "available_at": "2025-06-10T23:00Z"
-      },
-      "file": "octopus/octopus_products.json",
-      "content_type": "application/json"
     },
     {
       "label": "octopus_agile_product",

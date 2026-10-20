@@ -6,4 +6,8 @@ lint:
 test:
 	uv run pytest
 
-.PHONY: lint test
+# make ingest START=2025-06-01 END=2025-06-07  (no args: yesterday and today)
+ingest:
+	uv run flexcast ingest $(if $(START),--start $(START)) $(if $(END),--end $(END))
+
+.PHONY: lint test ingest

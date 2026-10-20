@@ -60,6 +60,9 @@ def requests() -> list[Request]:
                 {"settlementDateFrom": str(d), "settlementDateTo": str(d)},
             ),
             Request(
+                f"octopus_products_{kind}", "octopus", "/products/", {"available_at": iso(start)}
+            ),
+            Request(
                 f"agile_{kind}",
                 "octopus",
                 f"/products/{AGILE_PRODUCT}/electricity-tariffs/"
@@ -87,7 +90,6 @@ def requests() -> list[Request]:
             "/datasets/TEMP",
             {"publishDateTimeFrom": iso(n_start), "publishDateTimeTo": iso(n_end)},
         ),
-        Request("octopus_products", "octopus", "/products/", {"available_at": iso(n_start)}),
         Request("octopus_agile_product", "octopus", f"/products/{AGILE_PRODUCT}/"),
     ]
     return reqs
