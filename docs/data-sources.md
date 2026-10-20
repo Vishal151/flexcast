@@ -124,6 +124,40 @@ A decision time after ~11:00 London would give one complete NDF vintage and remo
 We keep 09:00 (SPEC default, closer to real day-ahead market deadlines) and handle the stitching
 explicitly. It stays configurable.
 
+## Candidate inputs for the model stage (verified 2026-10-20)
+
+The test for each: at the decision time (D-1 09:00 London; for target 2025-06-11 that is
+2025-06-10T08:00Z), is there a vintage covering the whole target day?
+
+| Source | What | Full target day at decision? | Verdict |
+|---|---|---|---|
+| Elexon `DGWS` | day-ahead wind + solar | **No**: published ~16:45 D-1 | unusable at 09:00 |
+| Elexon `IMBALNGC` (boundary `N`) | indicated imbalance | **No**: SP1-10 only (rolling run) | partial; full-day run ~10:47 |
+| Elexon `MELNGC` (boundary `N`) | indicated margin | **No**: SP1-10 only | partial |
+| Elexon `LOLPDRM` | loss-of-load probability, de-rated margin | **No**: ~10 periods ahead | partial |
+| NESO `embedded-wind-and-solar-forecasts` | embedded solar + wind, MW | **Yes**: hourly vintages (23/day), latest 07:12 covered SP1-48 | **use** |
+| NESO `day-ahead-power-exchange-prices-nordpool` | N2EX GB day-ahead auction price, £/MWh, hourly | target/framing, see below | **use** |
+
+Takeaway: at 09:00 D-1 almost nothing official covers all of tomorrow (NDF and WINDFOR are the
+exceptions via their early runs). The decision time, more than the model, limits what can be known.
+
+### NESO embedded wind and solar forecast
+- CKAN datastore API: `https://api.neso.energy/api/3/action/datastore_search_sql`; NESO Open Data Licence.
+- Yearly archive resources (2019-2026) keep every vintage via `Forecast_Datetime` (~5.4M rows/year);
+  the live resource holds only the latest snapshot (no vintage column), so live ingest must record
+  when it observed each value.
+- Fields: `SETTLEMENT_DATE`, `SETTLEMENT_PERIOD`, `EMBEDDED_SOLAR_FORECAST`, `EMBEDDED_SOLAR_CAPACITY`,
+  `EMBEDDED_WIND_FORECAST`, `EMBEDDED_WIND_CAPACITY` (MW), `Forecast_Datetime`.
+- `Forecast_Datetime` has no timezone. **Treat as UTC until confirmed**: if it is really London time,
+  reading it as UTC makes a vintage look later than it was (safe); the reverse would leak.
+- Example: vintage 2025-06-10T07:12 forecast 11,949 MW solar for 2025-06-11 13:00 (capacity 19,458 MW).
+
+### NESO N2EX GB day-ahead prices
+- Hourly (`Date`, `Delivery Period` "HH:MM - HH:MM", `Price` £/MWh), 2021-09-20 onward; tomorrow's
+  prices were already present on 2026-10-20 evening. Same API and licence as above.
+- **No publish timestamp.** Before using it, establish when each day's prices become available
+  (auction results time plus NESO's republication lag), and whether `Delivery Period` is London time.
+
 ## SPEC §2 edits (applied)
 WINDFOR hourly, MID provider `APXMIDP`, 1-day publish-window cap, MID instants, TEMP daily/low priority.
 
