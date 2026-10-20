@@ -5,6 +5,8 @@ Feature code may only read through `as_of(name, decision_time)`, which keeps row
 available_at < decision_time. Availability rules (docs/data-sources.md, SPEC §2):
 
 - ndf, windfor: publish_time.
+- embedded (NESO solar/wind): publish_time + EMBEDDED_LAG. A vintage reaches the archive some
+  25-85 min after its timestamp, and the timestamp's timezone is unconfirmed; 2 h covers both.
 - prices (system sell price), mid (APXMIDP): period start + PRICE_LAG. Real-time publication is
   ~48 min after period start; the stored value is the latest revision, which we accept as a
   known limitation (revisions are usually small; ingest now keeps every revision it sees).
@@ -20,9 +22,10 @@ from flexcast.settlement import LONDON, london_day_bounds
 from flexcast.storage import Storage
 
 PRICE_LAG = timedelta(hours=1)
+EMBEDDED_LAG = timedelta(hours=2)
 MID_PROVIDER = "APXMIDP"  # N2EX has gaps and zero-volume periods
 
-Name = Literal["prices", "mid", "ndf", "windfor"]
+Name = Literal["prices", "mid", "ndf", "windfor", "embedded"]
 
 
 UTC_TIME = "datetime64[us, UTC]"
@@ -36,6 +39,13 @@ EMPTY_SCHEMAS: dict[str, dict[str, str]] = {
     "mid": {"start_time": UTC_TIME, "data_provider": "object", "price": "float64"},
     "ndf": {"publish_time": UTC_TIME, "start_time": UTC_TIME, "demand": "int64"},
     "windfor": {"publish_time": UTC_TIME, "start_time": UTC_TIME, "generation": "int64"},
+    "embedded": {
+        "publish_time": UTC_TIME,
+        "start_time": UTC_TIME,
+        "solar_mw": "float64",
+        "solar_capacity_mw": "float64",
+        "wind_mw": "float64",
+    },
 }
 
 
@@ -55,14 +65,18 @@ class History:
     mid: pd.DataFrame  # start_time, price, available_at, london_date, hhmm
     ndf: pd.DataFrame  # publish_time, start_time, demand, available_at
     windfor: pd.DataFrame  # publish_time, start_time (hourly), generation, available_at
-    _ndf_by_day: dict[date, pd.DataFrame] = field(init=False, repr=False, compare=False)
+    embedded: pd.DataFrame  # publish_time, start_time, solar_mw, solar_capacity_mw, wind_mw, ...
+    _by_day: dict[str, dict[date, pd.DataFrame]] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        # Index NDF (2M rows) by target London date once, so each feature build is cheap.
-        local_date = self.ndf["start_time"].dt.tz_convert(LONDON).dt.date
-        object.__setattr__(
-            self, "_ndf_by_day", {d: g for d, g in self.ndf.groupby(local_date, sort=False)}
-        )
+        # Index the big vintage tables (millions of rows) by target London date once, so each
+        # feature build only scans one day's rows.
+        by_day = {}
+        for name in ("ndf", "embedded"):
+            df: pd.DataFrame = getattr(self, name)
+            local_date = df["start_time"].dt.tz_convert(LONDON).dt.date
+            by_day[name] = {d: g for d, g in df.groupby(local_date, sort=False)}
+        object.__setattr__(self, "_by_day", by_day)
 
     @classmethod
     def from_frames(
@@ -71,6 +85,7 @@ class History:
         mid: pd.DataFrame,
         ndf: pd.DataFrame,
         windfor: pd.DataFrame,
+        embedded: pd.DataFrame | None = None,
     ) -> "History":
         """Build from raw-schema frames (as stored by ingest)."""
         p = prices.sort_values("created_date_time").drop_duplicates("start_time", keep="last")
@@ -82,11 +97,14 @@ class History:
 
         n = ndf[["publish_time", "start_time", "demand"]]
         w = windfor[["publish_time", "start_time", "generation"]]
+        e = _empty(EMPTY_SCHEMAS["embedded"]) if embedded is None else embedded
+        e = e[["publish_time", "start_time", "solar_mw", "solar_capacity_mw", "wind_mw"]]
         return cls(
             prices=p.sort_values("start_time").reset_index(drop=True),
             mid=m.sort_values("start_time").reset_index(drop=True),
             ndf=n.assign(available_at=n["publish_time"]).reset_index(drop=True),
             windfor=w.assign(available_at=w["publish_time"]).reset_index(drop=True),
+            embedded=e.assign(available_at=e["publish_time"] + EMBEDDED_LAG).reset_index(drop=True),
         )
 
     @classmethod
@@ -95,17 +113,20 @@ class History:
             df = storage.read_parquet_dir(f"raw/{dataset}")
             return df if not df.empty else _empty(EMPTY_SCHEMAS[dataset])  # fresh deployment
 
-        return cls.from_frames(read("system_prices"), read("mid"), read("ndf"), read("windfor"))
+        return cls.from_frames(
+            read("system_prices"), read("mid"), read("ndf"), read("windfor"), read("embedded")
+        )
 
     def as_of(
         self, name: Name, decision_time: datetime, target_date: date | None = None
     ) -> pd.DataFrame:
-        """Rows knowable strictly before decision_time. For ndf, target_date narrows to that
-        day's periods first (a speed-up; the availability filter is the same)."""
+        """Rows knowable strictly before decision_time. For the vintage tables (ndf, embedded),
+        target_date narrows to that day's periods first (a speed-up; same availability filter)."""
         if decision_time.tzinfo is None:
             raise ValueError("decision_time must be tz-aware")
-        if name == "ndf" and target_date is not None:
-            df = self._ndf_by_day.get(target_date, self.ndf.iloc[:0])
+        if name in self._by_day and target_date is not None:
+            whole: pd.DataFrame = getattr(self, name)
+            df = self._by_day[name].get(target_date, whole.iloc[:0])
         else:
             df = getattr(self, name)
         out: pd.DataFrame = df[df["available_at"] < decision_time]

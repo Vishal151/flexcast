@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     data_uri: str = "file://./data"
     elexon_base_url: str = "https://data.elexon.co.uk/bmrs/api/v1"
     octopus_base_url: str = "https://api.octopus.energy/v1"
+    neso_base_url: str = "https://api.neso.energy/api/3/action"
     agile_region: str = "C"
     http_concurrency: int = 4
     git_sha: str = "unknown"  # recorded in model metadata; set by make / CI

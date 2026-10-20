@@ -17,7 +17,7 @@ import pandas as pd
 
 from flexcast.backtest import feature_table, training_cutoff
 from flexcast.config import Settings
-from flexcast.features import FEATURE_COLUMNS, build, decision_time_for
+from flexcast.features import build, decision_time_for
 from flexcast.history import History
 from flexcast.models.base import Model, load_model, save_model
 from flexcast.models.registry import MODELS
@@ -59,7 +59,7 @@ def train(history: History, storage: Storage, as_of: datetime, git_sha: str) -> 
             "git_sha": git_sha,
             "train_window": [str(trained[0]), str(trained[-1])],
             "rows": len(X),
-            "features": FEATURE_COLUMNS,
+            "features": model.features,
             "as_of": as_of.isoformat(),
             "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
         },

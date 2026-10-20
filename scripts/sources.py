@@ -10,6 +10,7 @@ LONDON = ZoneInfo("Europe/London")
 BASE_URLS = {
     "elexon": "https://data.elexon.co.uk/bmrs/api/v1",
     "octopus": "https://api.octopus.energy/v1",
+    "neso": "https://api.neso.energy/api/3/action",
 }
 
 DAYS = {
@@ -92,4 +93,23 @@ def requests() -> list[Request]:
         ),
         Request("octopus_agile_product", "octopus", f"/products/{AGILE_PRODUCT}/"),
     ]
+    return reqs + neso_requests()
+
+
+def neso_requests() -> list[Request]:
+    """Embedded solar/wind vintages for the publish windows features need (Stage 2c)."""
+    from flexcast.sources.neso import PACKAGE, NesoClient, embedded_sql
+
+    archives = NesoClient(BASE_URLS["neso"]).archive_resources()
+    reqs = [Request("neso_embedded_package", "neso", "/package_show", {"id": PACKAGE})]
+    for label, d in [
+        ("normal_pub_d-2", date(2025, 6, 9)),
+        ("normal_pub_d-1", date(2025, 6, 10)),
+        ("autumn_dst_pub_d-1", date(2025, 10, 25)),
+    ]:
+        start, end = london_day_utc(d)
+        sql = embedded_sql(archives[start.year], start, end)
+        reqs.append(
+            Request(f"neso_embedded_{label}", "neso", "/datastore_search_sql", {"sql": sql})
+        )
     return reqs

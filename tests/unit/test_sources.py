@@ -8,6 +8,7 @@ from flexcast.config import Settings
 from flexcast.settlement import london_day_bounds
 from flexcast.sources.elexon import ElexonClient
 from flexcast.sources.http import UpstreamError, get_json, iso_minute, windows
+from flexcast.sources.neso import NesoClient
 from flexcast.sources.octopus import OctopusClient
 
 S = Settings()
@@ -160,3 +161,55 @@ def test_agile_discovery_and_rates(upstream: respx.MockRouter) -> None:
     assert tariff == "E-1R-AGILE-24-10-01-C"
     rates = c.agile_rates(product.code, tariff, start, end)
     assert len(rates.rows) == 46 and not rates.rejects
+
+
+# --- NESO embedded solar/wind forecasts ------------------------------------------------------
+
+
+def test_neso_discovers_yearly_archives(upstream: respx.MockRouter) -> None:
+    archives = NesoClient(S.neso_base_url).archive_resources()
+    assert {2024, 2025, 2026} <= set(archives)
+
+
+def test_neso_embedded_vintages_cover_the_target_day(upstream: respx.MockRouter) -> None:
+    p = NesoClient(S.neso_base_url).embedded_forecasts(*london_day_bounds(date(2025, 6, 10)))
+    assert not p.rejects, p.rejects[:1]
+    assert all(r.publish_time.tzinfo is UTC for r in p.rows)
+    vintages = {r.publish_time for r in p.rows}
+    assert len(vintages) >= 20  # hourly
+    latest = max(v for v in vintages if v < datetime(2025, 6, 10, 8, tzinfo=UTC))
+    target = [r for r in p.rows if r.publish_time == latest and r.settlement_date == NORMAL]
+    assert [r.settlement_period for r in target] == list(range(1, 49))
+    midday = next(r for r in target if r.settlement_period == 27)
+    assert midday.start_time == datetime(2025, 6, 11, 12, tzinfo=UTC)  # 13:00 BST
+    assert 5_000 < midday.solar_mw < midday.solar_capacity_mw
+
+
+def test_neso_autumn_dst_has_50_periods(upstream: respx.MockRouter) -> None:
+    p = NesoClient(S.neso_base_url).embedded_forecasts(*london_day_bounds(date(2025, 10, 25)))
+    assert not p.rejects
+    one = max(r.publish_time for r in p.rows)
+    periods = sorted(
+        r.settlement_period for r in p.rows if r.publish_time == one and r.settlement_date == AUTUMN
+    )
+    assert periods == list(range(1, 51))
+
+
+def test_neso_rejects_rows_whose_gmt_time_disagrees() -> None:
+    from flexcast.sources.http import parse_rows
+    from flexcast.sources.neso import EmbeddedForecast
+
+    good = {
+        "Forecast_Datetime": "2025-06-10T07:12:12",
+        "SETTLEMENT_DATE": "2025-06-11T00:00:00",
+        "SETTLEMENT_PERIOD": 27,
+        "TIME_GMT": "12:30:00",
+        "EMBEDDED_SOLAR_FORECAST": 11949,
+        "EMBEDDED_SOLAR_CAPACITY": 19458,
+        "EMBEDDED_WIND_FORECAST": 900,
+        "EMBEDDED_WIND_CAPACITY": 6000,
+    }
+    bad = {**good, "TIME_GMT": "13:30:00"}  # an hour off: London time mistaken for GMT
+    p = parse_rows(EmbeddedForecast, [EmbeddedForecast.from_row(r) for r in (good, bad)])
+    assert len(p.rows) == 1 and len(p.rejects) == 1
+    assert "NESO says 13:30" in p.rejects[0]["error"]

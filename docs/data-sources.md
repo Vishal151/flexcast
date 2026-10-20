@@ -150,6 +150,17 @@ exceptions via their early runs). The decision time, more than the model, limits
   `EMBEDDED_WIND_FORECAST`, `EMBEDDED_WIND_CAPACITY` (MW), `Forecast_Datetime`.
 - `Forecast_Datetime` has no timezone. **Treat as UTC until confirmed**: if it is really London time,
   reading it as UTC makes a vintage look later than it was (safe); the reverse would leak.
+- `DATE_GMT` + `TIME_GMT` = the **end** of the settlement period in UTC (checked in summer and winter).
+  The client derives `start_time` from settlement date/period with our helper and rejects rows where
+  start + 30 min disagrees with `TIME_GMT`.
+- **Availability = `Forecast_Datetime` + 2 h.** The current-year archive is kept up to date, but a vintage
+  appears some 25-85 min after its timestamp (on 2026-10-20 at 21:17Z the latest was 19:52); 2 h covers
+  that and the unconfirmed timezone. At a 09:00 BST decision this uses the ~05:12Z vintage.
+- Each vintage forecasts ~13 days ahead (~620 rows); ingest keeps up to 2 days ahead (MAX_HORIZON_DAYS).
+- Backfill quirks (2024-10-18..2026-10-19, 17 MB): **no vintages published 2025-05-09..11** (archive gap;
+  targets 2025-05-11/12 get no solar inputs, which LightGBM treats as missing). On **2026-04-20/21** a few
+  vintages stamped exactly 00:00 have `TIME_GMT` in **London time** (an hour off), likely NESO's forecast
+  system migration; the start-time cross-check rejected those ~190 rows (kept in `rejects/embedded/`).
 - Example: vintage 2025-06-10T07:12 forecast 11,949 MW solar for 2025-06-11 13:00 (capacity 19,458 MW).
 
 ### NESO N2EX GB day-ahead prices

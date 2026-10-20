@@ -42,6 +42,14 @@ FEATURE_COLUMNS = [
     "wind_age_h",
     "residual_demand",
 ]
+# Stage 2c checkpoint B: NESO embedded (distribution-connected) solar and wind forecasts.
+EMBEDDED_COLUMNS = [
+    "solar",
+    "solar_capacity_factor",
+    "embedded_wind",
+    "embedded_age_h",
+]
+ALL_COLUMNS = FEATURE_COLUMNS + EMBEDDED_COLUMNS
 
 
 @dataclass(frozen=True)
@@ -153,8 +161,16 @@ def build(history: History, decision_time: datetime, target_date: date) -> Featu
     X["wind_age_h"] = _age_hours(decision, wind["publish_time"].reindex(hour_of))
     X["residual_demand"] = X["ndf"] - X["wind"]
 
+    # Embedded solar/wind: per-period latest vintage, like NDF.
+    emb = history.as_of("embedded", decision_time, target_date)
+    emb = prov.use("embedded", _latest_per_start(emb)).set_index("start_time").reindex(starts)
+    X["solar"] = emb["solar_mw"].to_numpy(dtype=float)
+    X["solar_capacity_factor"] = (emb["solar_mw"] / emb["solar_capacity_mw"]).to_numpy(dtype=float)
+    X["embedded_wind"] = emb["wind_mw"].to_numpy(dtype=float)
+    X["embedded_age_h"] = _age_hours(decision, emb["publish_time"])
+
     return Features(
-        X=X[FEATURE_COLUMNS],
+        X=X[ALL_COLUMNS],
         provenance=prov.latest,
         decision_time=decision_time,
         target_date=target_date,

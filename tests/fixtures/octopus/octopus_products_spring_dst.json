@@ -833,7 +833,7 @@
       "is_restricted": false,
       "term": 12,
       "available_from": "2024-04-05T00:00:00+01:00",
-      "available_to": null,
+      "available_to": "2026-10-22T00:00:00+01:00",
       "links": [
         {
           "href": "https://api.octopus.energy/v1/products/OUTGOING-SEG-EO-FIX-12M-24-04-05/",

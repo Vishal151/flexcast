@@ -27,7 +27,13 @@ def ingest_fixtures() -> None:
         )
     ok(
         run_job(
-            "ingest", "--start", "2025-06-09", "--end", "2025-06-10", "--datasets", "ndf,windfor"
+            "ingest",
+            "--start",
+            "2025-06-09",
+            "--end",
+            "2025-06-10",
+            "--datasets",
+            "ndf,windfor,embedded",
         )
     )
 
@@ -92,6 +98,7 @@ def test_ingest_lands_partitions_in_gcs(pipeline: dict[str, Any]) -> None:
     for d in ("2025-06-09", "2025-06-10"):
         assert f"raw/ndf/date={d}/part.parquet" in files
         assert f"raw/windfor/date={d}/part.parquet" in files
+        assert f"raw/embedded/date={d}/part.parquet" in files
     assert not [f for f in files if ".tmp" in f]
 
 

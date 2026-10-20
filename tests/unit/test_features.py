@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from flexcast.features import FEATURE_COLUMNS, build, decision_time_for
+from flexcast.features import ALL_COLUMNS, build, decision_time_for
 from flexcast.history import History
 from flexcast.settlement import LONDON, period_starts
 from flexcast.storage import Storage
@@ -37,11 +37,13 @@ def poison_future(h: History, decision_time: datetime) -> History:
         df.loc[df["available_at"] >= decision_time, col] = 1e9
         return df
 
+    embedded = bad(bad(bad(h.embedded, "solar_mw"), "solar_capacity_mw"), "wind_mw")
     return History(
         prices=bad(h.prices, "price"),
         mid=bad(h.mid, "price"),
         ndf=bad(h.ndf, "demand"),
         windfor=bad(h.windfor, "generation"),
+        embedded=embedded,
     )
 
 
@@ -66,7 +68,7 @@ def test_leakage_every_source_used_was_available_before_decision(
     h = history_for(synthetic_history, target)
     dt = decision_time_for(target)
     f = build(h, dt, target)
-    assert set(f.provenance) == {"prices", "mid", "ndf", "windfor"}
+    assert set(f.provenance) == {"prices", "mid", "ndf", "windfor", "embedded"}
     for source, t in f.provenance.items():
         assert t < dt, f"{source} used data available at {t}, decision {dt}"
 
@@ -93,7 +95,7 @@ def test_decision_time_is_london_wall_clock() -> None:
 @pytest.mark.parametrize("target", TARGETS)
 def test_shape_and_columns(synthetic_history: HistoryFactory, target: date) -> None:
     f = build(history_for(synthetic_history, target), decision_time_for(target), target)
-    assert list(f.X.columns) == FEATURE_COLUMNS
+    assert list(f.X.columns) == ALL_COLUMNS
     assert list(f.X.index) == period_starts(target)
     assert (f.X["n_periods"] == len(period_starts(target))).all()
 
@@ -208,6 +210,8 @@ def test_availability_rules_are_pinned(synthetic_history: HistoryFactory) -> Non
     assert (h.mid["available_at"] == h.mid["start_time"] + hour).all()
     assert (h.ndf["available_at"] == h.ndf["publish_time"]).all()
     assert (h.windfor["available_at"] == h.windfor["publish_time"]).all()
+    two_hours = pd.Timedelta(hours=2)
+    assert (h.embedded["available_at"] == h.embedded["publish_time"] + two_hours).all()
 
 
 def test_history_load_from_empty_storage(tmp_path: Path) -> None:
@@ -216,3 +220,23 @@ def test_history_load_from_empty_storage(tmp_path: Path) -> None:
     assert h.prices.empty and h.mid.empty and h.ndf.empty and h.windfor.empty
     assert h.actual_prices(NORMAL).empty
     assert h.as_of("ndf", decision_time_for(NORMAL), NORMAL).empty
+
+
+def test_solar_uses_latest_vintage_at_least_two_hours_old(
+    synthetic_history: HistoryFactory,
+) -> None:
+    dt = decision_time_for(NORMAL)  # 08:00Z: vintages count from publish + 2 h -> last is 05:12Z
+    f = build(history_for(synthetic_history, NORMAL), dt, NORMAL).X
+    assert (f["solar"] == encode_publish(pd.Timestamp("2025-06-10T05:12Z"))).all()
+    np.testing.assert_allclose(f["embedded_age_h"], 2.8)
+    np.testing.assert_allclose(f["solar_capacity_factor"], f["solar"] / 20_000)
+    assert (f["embedded_wind"] == 1_000).all()
+
+
+def test_history_without_embedded_data_gives_nan_solar(synthetic_history: HistoryFactory) -> None:
+    h = history_for(synthetic_history, NORMAL)
+    h2 = History(
+        prices=h.prices, mid=h.mid, ndf=h.ndf, windfor=h.windfor, embedded=h.embedded.iloc[:0]
+    )
+    f = build(h2, decision_time_for(NORMAL), NORMAL)
+    assert f.X["solar"].isna().all() and "embedded" not in f.provenance

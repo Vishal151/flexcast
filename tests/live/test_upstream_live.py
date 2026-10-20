@@ -12,6 +12,7 @@ import pytest
 from flexcast.config import Settings
 from flexcast.settlement import LONDON, london_day_bounds, period_starts
 from flexcast.sources.elexon import ElexonClient
+from flexcast.sources.neso import NesoClient
 from flexcast.sources.octopus import OctopusClient
 
 pytestmark = pytest.mark.live
@@ -72,3 +73,17 @@ def test_agile_discovery_and_rates() -> None:
     rates = c.agile_rates(product.code, c.tariff_code(product.code, S.agile_region), start, end)
     assert not rates.rejects
     assert len(rates.rows) == len(period_starts(DAY))
+
+
+def test_neso_embedded_forecast_vintages() -> None:
+    p = NesoClient(S.neso_base_url).embedded_forecasts(*london_day_bounds(DAY))
+    assert not p.rejects, p.rejects[:2]
+    assert len({r.publish_time for r in p.rows}) >= 20  # hourly vintages
+    tomorrow = DAY + timedelta(days=1)
+    latest = max(r.publish_time for r in p.rows)
+    covered = {
+        r.settlement_period
+        for r in p.rows
+        if r.publish_time == latest and r.settlement_date == tomorrow
+    }
+    assert len(covered) == len(period_starts(tomorrow))

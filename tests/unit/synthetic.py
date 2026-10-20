@@ -2,7 +2,7 @@
 exactly which row a feature came from:
 - price = london_day_ordinal % 97 + 2 * half_hour_of_local_day: unique per (day, clock time)
   within a 97-day window, with a realistic ~£94/MWh daily spread. MID = price + 0.5
-- NDF demand / WINDFOR generation = publish time in minutes since 2025-01-01
+- NDF demand / WINDFOR generation / NESO solar = publish time in minutes since 2025-01-01
 """
 
 from datetime import UTC, date, datetime, timedelta
@@ -56,6 +56,14 @@ def make_history(first: date, last: date) -> History:
             pub.floor("h") - pd.Timedelta("24h"), pub + pd.Timedelta("60h"), freq="1h"
         ):
             wind_rows.append((pub, s, encode_publish(pub)))
+    emb_rows = []
+    for pub in pd.date_range(lo + pd.Timedelta("12min"), hi, freq="1h"):  # NESO: hourly at :12
+        for s in pd.date_range(pub.ceil("30min"), pub + pd.Timedelta("48h"), freq="30min"):
+            emb_rows.append((pub, s, float(encode_publish(pub)), 20_000.0, 1_000.0))
     ndf = pd.DataFrame(ndf_rows, columns=["publish_time", "start_time", "demand"])
     wind = pd.DataFrame(wind_rows, columns=["publish_time", "start_time", "generation"])
-    return History.from_frames(prices, pd.concat([apx, n2ex]), ndf, wind)
+    embedded = pd.DataFrame(
+        emb_rows,
+        columns=["publish_time", "start_time", "solar_mw", "solar_capacity_mw", "wind_mw"],
+    )
+    return History.from_frames(prices, pd.concat([apx, n2ex]), ndf, wind, embedded)

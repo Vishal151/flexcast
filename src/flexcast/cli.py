@@ -14,6 +14,7 @@ from flexcast.optimise import optimise as run_optimiser
 from flexcast.prices import PriceSource, load_day_prices
 from flexcast.settlement import LONDON
 from flexcast.sources.elexon import ElexonClient
+from flexcast.sources.neso import NesoClient
 from flexcast.sources.octopus import OctopusClient
 from flexcast.storage import Storage
 
@@ -48,6 +49,7 @@ def ingest(
         ElexonClient(settings.elexon_base_url),
         OctopusClient(settings.octopus_base_url),
         region=settings.agile_region,
+        neso=NesoClient(settings.neso_base_url),
     )
     failed = ingester.run(first, last, names, concurrency=settings.http_concurrency)
     if failed:
@@ -146,6 +148,8 @@ def backtest(
 
     storage.write_parquet(result.daily, "backtest/daily.parquet")
     storage.write_parquet(result.forecasts, "backtest/forecasts.parquet")
+    lgbm_model = result.models["lgbm_quantile"]
+    assert isinstance(lgbm_model, LGBMQuantile)
     train_end = result.train_window[1]
     save_model(
         storage,
@@ -154,7 +158,7 @@ def backtest(
         {
             "git_sha": settings.git_sha,
             "train_window": [str(d) for d in result.train_window],
-            "features": list(history_features()),
+            "features": lgbm_model.features,
             "backtest": summary.loc["lgbm_quantile"].round(4).to_dict(),
             "risk_alpha": risk.alpha,
             "backtest_risk_aware": summary.loc[risk.strategy].round(4).to_dict(),
@@ -164,6 +168,13 @@ def backtest(
     report.write(Storage(report_uri), result, cfg, sens, risk)
     if experiment:
         from flexcast.experiments import log_experiment
+
+        # Keep this experiment's outputs, so notebooks can compare runs later.
+        storage.write_parquet(result.daily, f"backtest/experiments/{experiment}/daily.parquet")
+        storage.write_parquet(
+            result.forecasts, f"backtest/experiments/{experiment}/forecasts.parquet"
+        )
+        save_model(storage, lgbm_model, f"backtest/experiments/{experiment}/model", {})
         from flexcast.models.lgbm import NUM_ROUNDS, PARAMS
 
         log_experiment(
@@ -172,7 +183,7 @@ def backtest(
             description,
             {
                 "lgbm": {**PARAMS, "num_rounds": NUM_ROUNDS},
-                "features": history_features(),
+                "features": lgbm_model.features,
                 "risk_alpha": risk.alpha,
                 "battery": vars(cfg.battery),
             },
@@ -181,12 +192,6 @@ def backtest(
             git_sha=settings.git_sha,
         )
     typer.echo(summary.round(2).to_string())
-
-
-def history_features() -> list[str]:
-    from flexcast.features import FEATURE_COLUMNS
-
-    return FEATURE_COLUMNS
 
 
 @app.command()

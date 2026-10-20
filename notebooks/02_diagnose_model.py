@@ -50,8 +50,9 @@ ROOT = Path.cwd().parent if Path.cwd().name == "notebooks" else Path.cwd()
 store = Storage(f"file://{ROOT / 'data'}")
 history = History.load(store)
 
-forecasts = store.read_parquet("backtest/forecasts.parquet")
-daily = store.read_parquet("backtest/daily.parquet")
+# The baseline experiment's outputs (`flexcast backtest --experiment baseline`).
+forecasts = store.read_parquet("backtest/experiments/baseline/forecasts.parquet")
+daily = store.read_parquet("backtest/experiments/baseline/daily.parquet")
 lgbm = forecasts[forecasts["strategy"] == "lgbm_quantile"].copy()
 naive = forecasts[forecasts["strategy"] == "naive_last_day"].copy()
 for f in (lgbm, naive):
@@ -198,19 +199,17 @@ print(
 # of how much each input moves the forecast.
 
 # %%
-model_dirs = sorted(
-    p.rsplit("/", 1)[0] for p in store.list("models/lgbm_quantile") if p.endswith("metadata.json")
-)
-model = load_model(store, model_dirs[-1], MODELS)
+model = load_model(store, "backtest/experiments/baseline/model", MODELS)
 test_days = sorted(set(lgbm["target_date"]))
 X_test, _, _ = feature_table(history, test_days, decision_at=pd.Timestamp("09:00").time())
-contrib = model.boosters["p50"].predict(X_test, pred_contrib=True)[:, :-1]  # last col = bias
-importance = pd.Series(np.abs(contrib).mean(axis=0), index=X_test.columns).sort_values()
+X_model = X_test[model.features]
+contrib = model.boosters["p50"].predict(X_model, pred_contrib=True)[:, :-1]  # last col = bias
+importance = pd.Series(np.abs(contrib).mean(axis=0), index=X_model.columns).sort_values()
 
 fig, ax = plt.subplots(figsize=(7, 6))
 ax.barh(importance.index, importance.values, color=style.BLUE)
 ax.set(
-    title=f"Mean |SHAP| for the p50 model ({model_dirs[-1].rsplit('=', 1)[-1]})",
+    title="Mean |SHAP| for the baseline p50 model (last weekly retrain)",
     xlabel="average absolute contribution (£/MWh)",
 )
 plt.show()

@@ -1,10 +1,11 @@
+import json
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from flexcast.features import FEATURE_COLUMNS
+from flexcast.features import ALL_COLUMNS
 from flexcast.models.base import COLUMNS, Model, load_model, pinball_loss, save_model
 from flexcast.models.baselines import NaiveLastDay, SeasonalNaive
 from flexcast.storage import Storage
@@ -12,7 +13,7 @@ from flexcast.storage import Storage
 
 def feature_frame(n: int = 600, seed: int = 0) -> tuple[pd.DataFrame, pd.Series]:
     rng = np.random.default_rng(seed)
-    X = pd.DataFrame(rng.normal(50, 20, (n, len(FEATURE_COLUMNS))), columns=FEATURE_COLUMNS)
+    X = pd.DataFrame(rng.normal(50, 20, (n, len(ALL_COLUMNS))), columns=ALL_COLUMNS)
     X["hour"] = np.tile(np.arange(48) / 2, n // 48 + 1)[:n]
     y = X["price_d2"] * 0.6 + 30 * np.sin(X["hour"] / 24 * 2 * np.pi) + rng.normal(0, 10, n)
     return X, pd.Series(y, name="price")
@@ -104,3 +105,16 @@ def test_lgbm_training_is_deterministic() -> None:
     a.fit(X, y)
     b.fit(X, y)
     pd.testing.assert_frame_equal(a.predict(X), b.predict(X))
+
+
+def test_lgbm_loads_models_saved_before_features_were_recorded(
+    fitted_lgbm: Model, tmp_path: Path
+) -> None:
+    from flexcast.features import FEATURE_COLUMNS
+    from flexcast.models.lgbm import LGBMQuantile
+
+    files = fitted_lgbm.to_files()
+    params = json.loads(files["params.json"])
+    del params["features"]
+    loaded = LGBMQuantile.from_files({**files, "params.json": json.dumps(params)})
+    assert loaded.features == FEATURE_COLUMNS
