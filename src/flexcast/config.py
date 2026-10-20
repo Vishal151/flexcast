@@ -12,3 +12,4 @@ class Settings(BaseSettings):
     octopus_base_url: str = "https://api.octopus.energy/v1"
     agile_region: str = "C"
     http_concurrency: int = 4
+    git_sha: str = "unknown"  # recorded in model metadata; set by make / CI

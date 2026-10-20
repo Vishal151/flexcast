@@ -6,6 +6,7 @@ import uuid
 
 import fsspec
 import pandas as pd
+import pyarrow.parquet as pq
 
 
 class Storage:
@@ -16,7 +17,7 @@ class Storage:
     def _abs(self, path: str) -> str:
         return f"{self.root}/{path.lstrip('/')}"
 
-    def _write_bytes(self, data: bytes, path: str) -> None:
+    def write_bytes(self, data: bytes, path: str) -> None:
         """Write to a temp object then move, so readers never see a half-written file."""
         target = self._abs(path)
         self.fs.makedirs(target.rsplit("/", 1)[0], exist_ok=True)
@@ -40,14 +41,24 @@ class Storage:
     def write_parquet(self, df: pd.DataFrame, path: str) -> None:
         buf = io.BytesIO()
         df.to_parquet(buf, index=False, engine="pyarrow", compression="snappy")
-        self._write_bytes(buf.getvalue(), path)
+        self.write_bytes(buf.getvalue(), path)
 
     def read_parquet(self, path: str) -> pd.DataFrame:
         with self.fs.open(self._abs(path), "rb") as f:
             return pd.read_parquet(f, engine="pyarrow")
 
+    def read_parquet_dir(self, prefix: str) -> pd.DataFrame:
+        """Concatenate every Parquet file under `prefix` (empty frame if none)."""
+        paths = [self._abs(p) for p in self.list(prefix) if p.endswith(".parquet")]
+        if not paths:
+            return pd.DataFrame()
+        # partitioning=None: don't turn date=... directories into an extra column.
+        table = pq.read_table(paths, filesystem=self.fs, partitioning=None)
+        out: pd.DataFrame = table.to_pandas()
+        return out
+
     def write_text(self, text: str, path: str) -> None:
-        self._write_bytes(text.encode(), path)
+        self.write_bytes(text.encode(), path)
 
     def read_text(self, path: str) -> str:
         with self.fs.open(self._abs(path), "rb") as f:

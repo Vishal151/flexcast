@@ -55,3 +55,12 @@ def test_relative_file_uri(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.chdir(tmp_path)
     Storage("file://./data").write_text("x", "a.txt")
     assert (tmp_path / "data" / "a.txt").read_text() == "x"
+
+
+def test_read_parquet_dir_concatenates_partitions(storage: Storage) -> None:
+    for i, d in enumerate(("2025-06-11", "2025-06-12")):
+        storage.write_parquet(pd.DataFrame({"a": [i]}), f"raw/x/date={d}/part.parquet")
+    out = storage.read_parquet_dir("raw/x")
+    assert sorted(out["a"]) == [0, 1]
+    assert list(out.columns) == ["a"]
+    assert storage.read_parquet_dir("raw/missing").empty

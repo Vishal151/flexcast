@@ -96,3 +96,67 @@ def optimise(
     typer.echo(f"best day {v.idxmax()} £{v.max():.2f}; worst day {v.idxmin()} £{v.min():.2f}")
     if skipped:
         typer.echo(f"skipped {len(skipped)} incomplete/missing days: {skipped[:5]}...", err=True)
+
+
+@app.command()
+def backtest(
+    test_start: Annotated[
+        str | None, typer.Option(help="Default: 364 days before test-end")
+    ] = None,
+    test_end: Annotated[str | None, typer.Option(help="Default: last day with prices")] = None,
+    train_start: Annotated[str | None, typer.Option(help="Default: first day with prices")] = None,
+    report_uri: Annotated[str, typer.Option(help="Where results.md/png go")] = "file://./docs",
+) -> None:
+    """Rolling-origin backtest of all models; writes the report and the last LightGBM model."""
+    from flexcast import report
+    from flexcast.backtest import BacktestConfig, run, sensitivity, summarise
+    from flexcast.history import History
+    from flexcast.models.base import save_model
+    from flexcast.models.baselines import NaiveLastDay, SeasonalNaive
+    from flexcast.models.lgbm import LGBMQuantile
+
+    settings = Settings()
+    storage = Storage(settings.data_uri)
+    history = History.load(storage)
+    days = history.prices["london_date"]
+    last = date.fromisoformat(test_end) if test_end else days.max()
+    cfg = BacktestConfig(
+        test_start=date.fromisoformat(test_start) if test_start else last - timedelta(days=364),
+        test_end=last,
+        train_start=date.fromisoformat(train_start) if train_start else days.min(),
+    )
+    result = run(
+        history,
+        cfg,
+        {
+            "naive_last_day": NaiveLastDay,
+            "seasonal_naive": SeasonalNaive,
+            "lgbm_quantile": LGBMQuantile,
+        },
+    )
+    sens = sensitivity(result.forecasts, cfg.battery, (0.0, 0.01, 0.02, 0.04))
+    summary = summarise(result.daily)
+
+    storage.write_parquet(result.daily, "backtest/daily.parquet")
+    storage.write_parquet(result.forecasts, "backtest/forecasts.parquet")
+    train_end = result.train_window[1]
+    save_model(
+        storage,
+        result.models["lgbm_quantile"],
+        f"models/lgbm_quantile/train_end={train_end}",
+        {
+            "git_sha": settings.git_sha,
+            "train_window": [str(d) for d in result.train_window],
+            "features": list(history_features()),
+            "backtest": summary.loc["lgbm_quantile"].round(4).to_dict(),
+            "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        },
+    )
+    report.write(Storage(report_uri), result, cfg, sens, best_model="lgbm_quantile")
+    typer.echo(summary.round(2).to_string())
+
+
+def history_features() -> list[str]:
+    from flexcast.features import FEATURE_COLUMNS
+
+    return FEATURE_COLUMNS

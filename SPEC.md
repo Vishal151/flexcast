@@ -15,7 +15,7 @@ An aggregator controls a fleet of home batteries. Each day, before a decision de
 The project answers three questions:
 1. How much is a battery worth with **perfect foresight** of prices? (upper bound)
 2. How much does it earn using **our forecast**? (what we can actually capture)
-3. How much does it earn using a **naive forecast** (yesterday's prices)? (the bar to beat)
+3. How much does it earn using a **naive forecast** (the last complete day of prices known at decision time, i.e. D-2)? (the bar to beat)
 
 **Headline metric:** % of perfect-foresight value captured, vs naive. Forecast accuracy (MAE, pinball loss) is secondary — it only matters insofar as it moves £.
 
@@ -48,6 +48,7 @@ Attribution required in README: "Contains BMRS data © Elexon Limited copyright 
 - **Settlement periods**: 48 per day normally, **46** on spring DST day, **50** on autumn DST day. Store timestamps in UTC; derive settlement date/period, never the reverse by arithmetic.
 - **Agile day-ahead rates** publish ~16:00 London; before then today's query returns <48 rows.
 - **Forecast vintages**: for each target day, keep only forecasts with `publishTime < decision_time`. Using the latest revision is leakage.
+- **Availability rules**: NDF/WINDFOR at `publishTime`; system prices and MID at period start + 1 h (real-time publication ~48 min after period start). The system-prices endpoint returns the *latest revision*, and its `createdDateTime` is that revision's time (~D+1); historical backfills therefore hold revised, not first-published, values.
 - **Query window cap**: `NDF`/`WINDFOR` publish-time queries are capped at 1 day per request; clients must chunk.
 - **MID `from`/`to` are instants**, not dates: query with the London-day UTC bounds.
 - Prices can be **negative** and **spiky**. Don't clip in storage; decide clipping in modelling, explicitly.
@@ -95,7 +96,7 @@ Storage goes through **fsspec** (`file://` and `gs://` via `gcsfs`), so switchin
 ### Design choices (and why)
 - **Parquet + DuckDB, not a database.** Data is small (~17.5k rows/year per series). Zero idle cost. No BigQuery emulator needed.
 - **Cloud Run Jobs, not Airflow/Kubernetes.** Three scheduled batch jobs don't need an orchestrator.
-- **joblib artefacts + metadata JSON, not MLflow.** Metadata: git SHA, training window, features, backtest metrics, created_at.
+- **Native model files + metadata JSON, not MLflow or pickles.** LightGBM's text format (readable, version-tolerant, no code execution on load). Metadata: git SHA, training window, features, backtest metrics, created_at.
 - **One Docker image, multiple entrypoints** (`flexcast ingest|train|plan|serve|consume`).
 
 ### Package layout
@@ -169,7 +170,7 @@ Each stage has a **learning goal**, a **build** list, **acceptance** criteria, a
 **Build:**
 - `features.py::build(decision_time, target_date)` — only data published before `decision_time` (default D-1 09:00 Europe/London, configurable).
 - Features: calendar (period, dow, holiday, DST flag), lagged system/MID prices, NDF/WINDFOR vintages for target day, rolling stats.
-- Models behind one interface: `NaiveYesterday`, `SeasonalNaive` (same period last week), `LGBMQuantile` (p10/p50/p90).
+- Models behind one interface: `NaiveLastDay` (D-2, the last complete day at decision time), `SeasonalNaive` (same time last week), `LGBMQuantile` (p10/p50/p90).
 - **Leakage test (required):** every feature's source publish time < decision_time.
 - Rolling-origin backtest ≥ 12 months: retrain weekly, forecast daily. Each day: optimise on forecast → settle at actuals. Same for perfect foresight and baselines.
 - Output: £/battery/year, % of perfect foresight captured, MAE, pinball loss, worst 10 days; fleet scaling for 1k/10k/100k batteries (price-impact caveat). Results → `docs/results.md` with one chart.
