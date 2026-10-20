@@ -1,0 +1,320 @@
+{
+  "recorded_at": "2026-10-20T10:24:31+00:00",
+  "base_urls": {
+    "elexon": "https://data.elexon.co.uk/bmrs/api/v1",
+    "octopus": "https://api.octopus.energy/v1"
+  },
+  "entries": [
+    {
+      "label": "system_prices_normal",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/balancing/settlement/system-prices/2025-06-11",
+      "params": {},
+      "file": "elexon/system_prices_normal.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "mid_normal",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/MID",
+      "params": {
+        "from": "2025-06-10T23:00Z",
+        "to": "2025-06-11T22:30Z"
+      },
+      "file": "elexon/mid_normal.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "fuelhh_normal",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/FUELHH",
+      "params": {
+        "settlementDateFrom": "2025-06-11",
+        "settlementDateTo": "2025-06-11"
+      },
+      "file": "elexon/fuelhh_normal.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "agile_normal",
+      "source": "octopus",
+      "method": "GET",
+      "path": "/products/AGILE-24-10-01/electricity-tariffs/E-1R-AGILE-24-10-01-C/standard-unit-rates/",
+      "params": {
+        "period_from": "2025-06-10T23:00Z",
+        "period_to": "2025-06-11T23:00Z"
+      },
+      "file": "octopus/agile_normal.json",
+      "content_type": "application/json"
+    },
+    {
+      "label": "ndf_normal_pub_d-2",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/NDF",
+      "params": {
+        "publishDateTimeFrom": "2025-06-08T23:00Z",
+        "publishDateTimeTo": "2025-06-09T23:00Z"
+      },
+      "file": "elexon/ndf_normal_pub_d-2.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "windfor_normal_pub_d-2",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/WINDFOR",
+      "params": {
+        "publishDateTimeFrom": "2025-06-08T23:00Z",
+        "publishDateTimeTo": "2025-06-09T23:00Z"
+      },
+      "file": "elexon/windfor_normal_pub_d-2.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "ndf_normal_pub_d-1",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/NDF",
+      "params": {
+        "publishDateTimeFrom": "2025-06-09T23:00Z",
+        "publishDateTimeTo": "2025-06-10T23:00Z"
+      },
+      "file": "elexon/ndf_normal_pub_d-1.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "windfor_normal_pub_d-1",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/WINDFOR",
+      "params": {
+        "publishDateTimeFrom": "2025-06-09T23:00Z",
+        "publishDateTimeTo": "2025-06-10T23:00Z"
+      },
+      "file": "elexon/windfor_normal_pub_d-1.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "system_prices_spring_dst",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/balancing/settlement/system-prices/2025-03-30",
+      "params": {},
+      "file": "elexon/system_prices_spring_dst.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "mid_spring_dst",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/MID",
+      "params": {
+        "from": "2025-03-30T00:00Z",
+        "to": "2025-03-30T22:30Z"
+      },
+      "file": "elexon/mid_spring_dst.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "fuelhh_spring_dst",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/FUELHH",
+      "params": {
+        "settlementDateFrom": "2025-03-30",
+        "settlementDateTo": "2025-03-30"
+      },
+      "file": "elexon/fuelhh_spring_dst.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "agile_spring_dst",
+      "source": "octopus",
+      "method": "GET",
+      "path": "/products/AGILE-24-10-01/electricity-tariffs/E-1R-AGILE-24-10-01-C/standard-unit-rates/",
+      "params": {
+        "period_from": "2025-03-30T00:00Z",
+        "period_to": "2025-03-30T23:00Z"
+      },
+      "file": "octopus/agile_spring_dst.json",
+      "content_type": "application/json"
+    },
+    {
+      "label": "ndf_spring_dst_pub_d-2",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/NDF",
+      "params": {
+        "publishDateTimeFrom": "2025-03-28T00:00Z",
+        "publishDateTimeTo": "2025-03-29T00:00Z"
+      },
+      "file": "elexon/ndf_spring_dst_pub_d-2.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "windfor_spring_dst_pub_d-2",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/WINDFOR",
+      "params": {
+        "publishDateTimeFrom": "2025-03-28T00:00Z",
+        "publishDateTimeTo": "2025-03-29T00:00Z"
+      },
+      "file": "elexon/windfor_spring_dst_pub_d-2.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "ndf_spring_dst_pub_d-1",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/NDF",
+      "params": {
+        "publishDateTimeFrom": "2025-03-29T00:00Z",
+        "publishDateTimeTo": "2025-03-30T00:00Z"
+      },
+      "file": "elexon/ndf_spring_dst_pub_d-1.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "windfor_spring_dst_pub_d-1",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/WINDFOR",
+      "params": {
+        "publishDateTimeFrom": "2025-03-29T00:00Z",
+        "publishDateTimeTo": "2025-03-30T00:00Z"
+      },
+      "file": "elexon/windfor_spring_dst_pub_d-1.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "system_prices_autumn_dst",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/balancing/settlement/system-prices/2025-10-26",
+      "params": {},
+      "file": "elexon/system_prices_autumn_dst.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "mid_autumn_dst",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/MID",
+      "params": {
+        "from": "2025-10-25T23:00Z",
+        "to": "2025-10-26T23:30Z"
+      },
+      "file": "elexon/mid_autumn_dst.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "fuelhh_autumn_dst",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/FUELHH",
+      "params": {
+        "settlementDateFrom": "2025-10-26",
+        "settlementDateTo": "2025-10-26"
+      },
+      "file": "elexon/fuelhh_autumn_dst.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "agile_autumn_dst",
+      "source": "octopus",
+      "method": "GET",
+      "path": "/products/AGILE-24-10-01/electricity-tariffs/E-1R-AGILE-24-10-01-C/standard-unit-rates/",
+      "params": {
+        "period_from": "2025-10-25T23:00Z",
+        "period_to": "2025-10-27T00:00Z"
+      },
+      "file": "octopus/agile_autumn_dst.json",
+      "content_type": "application/json"
+    },
+    {
+      "label": "ndf_autumn_dst_pub_d-2",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/NDF",
+      "params": {
+        "publishDateTimeFrom": "2025-10-23T23:00Z",
+        "publishDateTimeTo": "2025-10-24T23:00Z"
+      },
+      "file": "elexon/ndf_autumn_dst_pub_d-2.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "windfor_autumn_dst_pub_d-2",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/WINDFOR",
+      "params": {
+        "publishDateTimeFrom": "2025-10-23T23:00Z",
+        "publishDateTimeTo": "2025-10-24T23:00Z"
+      },
+      "file": "elexon/windfor_autumn_dst_pub_d-2.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "ndf_autumn_dst_pub_d-1",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/NDF",
+      "params": {
+        "publishDateTimeFrom": "2025-10-24T23:00Z",
+        "publishDateTimeTo": "2025-10-25T23:00Z"
+      },
+      "file": "elexon/ndf_autumn_dst_pub_d-1.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "windfor_autumn_dst_pub_d-1",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/WINDFOR",
+      "params": {
+        "publishDateTimeFrom": "2025-10-24T23:00Z",
+        "publishDateTimeTo": "2025-10-25T23:00Z"
+      },
+      "file": "elexon/windfor_autumn_dst_pub_d-1.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "temp_normal",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/TEMP",
+      "params": {
+        "publishDateTimeFrom": "2025-06-10T23:00Z",
+        "publishDateTimeTo": "2025-06-11T23:00Z"
+      },
+      "file": "elexon/temp_normal.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "octopus_products",
+      "source": "octopus",
+      "method": "GET",
+      "path": "/products/",
+      "params": {
+        "available_at": "2025-06-10T23:00Z"
+      },
+      "file": "octopus/octopus_products.json",
+      "content_type": "application/json"
+    },
+    {
+      "label": "octopus_agile_product",
+      "source": "octopus",
+      "method": "GET",
+      "path": "/products/AGILE-24-10-01/",
+      "params": {},
+      "file": "octopus/octopus_agile_product.json",
+      "content_type": "application/json"
+    }
+  ]
+}

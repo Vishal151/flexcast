@@ -1,0 +1,33 @@
+[project]
+name = "flexcast"
+version = "0.0.0"
+description = "Forecast-driven scheduler for home batteries on GB market data"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "httpx>=0.27",
+    "pandas>=2.2",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.11",
+    "pandas-stubs>=2.2",
+    "pytest>=8.3",
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "DTZ"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["scripts", "tests"]
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+addopts = "-ra"
