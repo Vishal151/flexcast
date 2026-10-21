@@ -166,8 +166,16 @@ exceptions via their early runs). The decision time, more than the model, limits
 ### NESO N2EX GB day-ahead prices
 - Hourly (`Date`, `Delivery Period` "HH:MM - HH:MM", `Price` £/MWh), 2021-09-20 onward; tomorrow's
   prices were already present on 2026-10-20 evening. Same API and licence as above.
-- **No publish timestamp.** Before using it, establish when each day's prices become available
-  (auction results time plus NESO's republication lag), and whether `Delivery Period` is London time.
+- **No publish timestamp.** Auction timing per Nord Pool: gate closure **09:50 UK time on D-1**, results
+  **by 10:00**, usually within minutes; a second auction can delay results if price thresholds are hit.
+  NESO's republication time: being measured (see journal).
+- **`Date` + `Delivery Period` are UTC, not London time** (verified 2026-10-21). Every day has exactly
+  24 rows, including both clock-change days (London days have 23/25 hours), and on summer days the
+  series lines up with Octopus Agile (which is derived from day-ahead prices, with exact UTC times) far
+  better read as UTC (residual sd 1.96 p/kWh, correlation 0.967) than as London time (2.74, 0.935) or
+  CET (correlation 0.857 over all months). Read as London time, every summer price would be an hour off.
+- No duplicate (Date, Delivery Period) rows in 2021-09-20..2026-10-21. The current day can be partial
+  (2026-10-21 at 09:35Z had 22 rows, to 21:00-22:00).
 
 ## SPEC §2 edits (applied)
 WINDFOR hourly, MID provider `APXMIDP`, 1-day publish-window cap, MID instants, TEMP daily/low priority.
