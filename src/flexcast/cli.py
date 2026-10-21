@@ -140,8 +140,22 @@ def backtest(
             "lgbm_quantile": LGBMQuantile,
         },
     )
+    base_strategy = "lgbm_quantile"
+    if settings.calibration_window_days > 0:
+        from flexcast.models.calibration import add_calibrated
+
+        add_calibrated(
+            result,
+            cfg.battery,
+            "lgbm_quantile",
+            "lgbm_calibrated",
+            settings.calibration_window_days,
+            settings.calibration_hours_per_block,
+            tuple(settings.calibration_adjust.split(",")),
+        )
+        base_strategy = "lgbm_calibrated"
     risk = add_risk_aware(
-        result, cfg.battery, "lgbm_quantile", (0.0, 0.25, 0.5, 0.75, 1.0), "lgbm_risk_aware"
+        result, cfg.battery, base_strategy, (0.0, 0.25, 0.5, 0.75, 1.0), "lgbm_risk_aware"
     )
     sens = sensitivity(result.forecasts, cfg.battery, (0.0, 0.01, 0.02, 0.04))
     summary = summarise(result.daily)
@@ -175,15 +189,12 @@ def backtest(
             result.forecasts, f"backtest/experiments/{experiment}/forecasts.parquet"
         )
         save_model(storage, lgbm_model, f"backtest/experiments/{experiment}/model", {})
-        from flexcast.models.lgbm import NUM_ROUNDS, PARAMS
-
         log_experiment(
             Storage("file://./experiments"),
             experiment,
             description,
             {
-                "lgbm": {**PARAMS, "num_rounds": NUM_ROUNDS},
-                "features": lgbm_model.features,
+                "lgbm": lgbm_model.config(),
                 "risk_alpha": risk.alpha,
                 "battery": vars(cfg.battery),
             },

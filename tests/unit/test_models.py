@@ -111,10 +111,26 @@ def test_lgbm_loads_models_saved_before_features_were_recorded(
     fitted_lgbm: Model, tmp_path: Path
 ) -> None:
     from flexcast.features import FEATURE_COLUMNS
-    from flexcast.models.lgbm import LGBMQuantile
+    from flexcast.models.lgbm import NUM_ROUNDS, PARAMS, LGBMQuantile
 
     files = fitted_lgbm.to_files()
-    params = json.loads(files["params.json"])
-    del params["features"]
-    loaded = LGBMQuantile.from_files({**files, "params.json": json.dumps(params)})
+    old_format = json.dumps({**PARAMS, "num_rounds": NUM_ROUNDS})  # pre-Stage-2c params.json
+    loaded = LGBMQuantile.from_files({**files, "params.json": old_format})
     assert loaded.features == FEATURE_COLUMNS
+
+
+def test_lgbm_settings_round_trip_and_mean_objective(tmp_path: Path) -> None:
+    from flexcast.models.lgbm import LGBMQuantile
+
+    X, y = feature_frame()
+    m = LGBMQuantile(
+        params={"num_leaves": 7, "learning_rate": 0.1}, num_rounds=50, p50_objective="regression"
+    )
+    m.fit(X, y)
+    loaded = round_trip(m, tmp_path)
+    assert isinstance(loaded, LGBMQuantile)
+    assert loaded.config() == m.config()
+    assert loaded.config()["params"]["num_leaves"] == 7
+    pd.testing.assert_frame_equal(loaded.predict(X), m.predict(X))
+    # the p50 booster really was trained on squared error
+    assert "objective=regression" in m.boosters["p50"].model_to_string()

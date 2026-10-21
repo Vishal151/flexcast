@@ -20,6 +20,7 @@ from flexcast.config import Settings
 from flexcast.features import build, decision_time_for
 from flexcast.history import History
 from flexcast.models.base import Model, load_model, save_model
+from flexcast.models.calibration import apply_offsets, fit_offsets
 from flexcast.models.registry import MODELS
 from flexcast.optimise import Battery, optimise, settle
 from flexcast.settlement import period_starts
@@ -80,13 +81,15 @@ def plan(history: History, storage: Storage, target_date: date, settings: Settin
     model, model_prefix = load_latest_model(storage)
     decision_time = decision_time_for(target_date, settings.decision_at)
     features = build(history, decision_time, target_date)
-    pred = model.predict(features.X)
+    raw = model.predict(features.X)
+    pred, offsets = _calibrate(history, storage, target_date, raw, settings)
     a = settings.risk_alpha
     buy = pred["p50"] + a * (pred["p90"] - pred["p50"])
     sell = pred["p50"] - a * (pred["p50"] - pred["p10"])
     schedule = optimise(buy, Battery(), sell_prices=sell)
 
-    forecast = pred.rename_axis("start_time").reset_index()
+    # Keep the raw quantiles too: tomorrow's calibration is fitted on the raw track record.
+    forecast = pred.join(raw.add_prefix("raw_")).rename_axis("start_time").reset_index()
     frame = schedule.frame.rename(columns={"price_gbp_per_mwh": "planning_buy_gbp_per_mwh"})
     frame = frame.assign(planning_sell_gbp_per_mwh=sell.to_numpy()).rename_axis("start_time")
     prefix = f"plans/date={target_date}"
@@ -97,12 +100,48 @@ def plan(history: History, storage: Storage, target_date: date, settings: Settin
         "decision_time": decision_time.astimezone(UTC).isoformat(),
         "model": model_prefix,
         "risk_alpha": a,
+        "calibration_offsets": offsets,
         "expected_gbp": schedule.objective_gbp,
         "provenance": {k: v.isoformat() for k, v in features.provenance.items()},
         "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }
     storage.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", f"{prefix}/plan.json")
     return Plan(target_date, forecast, frame.reset_index(), schedule.objective_gbp)
+
+
+def _calibrate(
+    history: History, storage: Storage, target_date: date, raw: pd.DataFrame, settings: Settings
+) -> tuple[pd.DataFrame, dict[str, dict[str, float]]]:
+    """Rolling conformal calibration from past plans whose actual prices are known."""
+    window = settings.calibration_window_days
+    if window <= 0:
+        return raw, {}
+    last_known = training_cutoff(decision_time_for(target_date, settings.decision_at))
+    first = last_known - timedelta(days=window - 1)
+    past = []
+    for d in planned_dates(storage):
+        if not first <= d <= last_known:
+            continue
+        actual = history.actual_prices(d)
+        if len(actual) != len(period_starts(d)):
+            continue
+        f = storage.read_parquet(f"plans/date={d}/forecast.parquet").set_index("start_time")
+        cols = {f"raw_{c}": c for c in ("p10", "p50", "p90")}
+        f = (
+            f[list(cols)].rename(columns=cols)
+            if set(cols) <= set(f.columns)
+            else f[list(cols.values())]
+        )
+        past.append(f.assign(actual=actual).reset_index())
+    hours = settings.calibration_hours_per_block
+    adjust = tuple(settings.calibration_adjust.split(","))
+    if not past:
+        return raw, {}
+    offsets = fit_offsets(pd.concat(past, ignore_index=True), hours, adjust=adjust)
+    framed = raw.rename_axis("start_time").reset_index()
+    calibrated = apply_offsets(framed, offsets, hours).set_index("start_time")[raw.columns]
+    as_dict = {str(b): {str(c): float(v) for c, v in row.items()} for b, row in offsets.iterrows()}
+    return calibrated, as_dict
 
 
 def planned_dates(storage: Storage) -> list[date]:

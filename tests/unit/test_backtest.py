@@ -170,3 +170,12 @@ def test_select_alpha_picks_best_validation_alpha(history: History) -> None:
     gbp = grid["gbp_per_year"]
     assert float(gbp["alpha=0"]) < float(gbp["alpha=0.25"])
     pd.testing.assert_frame_equal(grid, alpha_grid(val, CFG.battery, "bad", alphas))
+
+
+def test_run_reuses_a_prepared_feature_table(history: History) -> None:
+    from flexcast.backtest import days_between, feature_table
+
+    table = feature_table(history, days_between(CFG.train_start, CFG.test_end), CFG.decision_at)
+    a = run(history, CFG, {"naive": NaiveLastDay}).daily
+    b = run(history, CFG, {"naive": NaiveLastDay}, table=table).daily
+    pd.testing.assert_frame_equal(a, b)

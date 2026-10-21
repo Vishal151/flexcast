@@ -1,6 +1,6 @@
 import json
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -107,3 +107,28 @@ def test_schedule_index_is_utc(history: History, storage: Storage, trained: str)
     plan(history, storage, TARGET, Settings())
     s = storage.read_parquet(f"plans/date={TARGET}/schedule.parquet")
     assert str(pd.DatetimeIndex(s["start_time"]).tz) == "UTC"
+
+
+def test_plan_calibrates_from_its_own_past_plans(
+    history: History, storage: Storage, trained: str
+) -> None:
+    # Track record: plans for 18..23 June, whose prices are all known by 25 June's decision.
+    for d in (date(2025, 6, 18) + timedelta(days=i) for i in range(6)):
+        plan(history, storage, d, Settings())
+    settings = Settings(calibration_window_days=10, calibration_adjust="p10,p90")
+    out = plan(history, storage, TARGET, settings)
+    meta = json.loads(storage.read_text(f"plans/date={TARGET}/plan.json"))
+    assert set(meta["calibration_offsets"]) == {"0"}
+    f = out.forecast
+    assert {"raw_p10", "raw_p50", "raw_p90"} <= set(f.columns)
+    assert (f["p50"] == f["raw_p50"]).all()  # band-only: decisions unchanged
+    assert not (f["p90"] == f["raw_p90"]).all()  # but the band moved
+
+
+def test_plan_without_track_record_is_uncalibrated(
+    history: History, storage: Storage, trained: str
+) -> None:
+    out = plan(history, storage, TARGET, Settings(calibration_window_days=10))
+    assert (out.forecast["p90"] == out.forecast["raw_p90"]).all()
+    meta = json.loads(storage.read_text(f"plans/date={TARGET}/plan.json"))
+    assert meta["calibration_offsets"] == {}

@@ -98,10 +98,17 @@ def feature_table(
     return X_all, y_all, skipped
 
 
+Table = tuple[pd.DataFrame, pd.Series, list[date]]
+
+
 def run(
-    history: History, cfg: BacktestConfig, factories: dict[str, ModelFactory]
+    history: History,
+    cfg: BacktestConfig,
+    factories: dict[str, ModelFactory],
+    table: Table | None = None,
 ) -> BacktestResult:
-    X_all, y_all, skipped = feature_table(
+    """`table` (from feature_table) can be passed in to reuse features across many runs."""
+    X_all, y_all, skipped = table or feature_table(
         history, days_between(cfg.train_start, cfg.test_end), cfg.decision_at
     )
     target_dates = X_all.index.get_level_values("target_date")
