@@ -2,6 +2,7 @@
 in these values, never in code paths."""
 
 from datetime import time
+from typing import Literal
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,6 +19,8 @@ class Settings(BaseSettings):
     http_concurrency: int = 4
     git_sha: str = "unknown"  # recorded in model metadata; set by make / CI
     decision_at: time = time(9)  # D-1 wall-clock time, Europe/London
+    # The market the battery trades (SPEC §1): the day-ahead auction; imbalance is the comparison.
+    market: Literal["imbalance", "day_ahead"] = "day_ahead"
     risk_alpha: float = 0.0  # chosen by the backtest's validation window (docs/results.md)
     # Rolling conformal calibration of the quantiles, chosen in notebook 05: 90 days, one offset
     # for the whole day, band only (p50 and so the schedule unchanged). 0 days = off.

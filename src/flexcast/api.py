@@ -10,7 +10,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from flexcast.config import Settings
 from flexcast.history import History
-from flexcast.jobs import LATEST, plan_metrics
+from flexcast.jobs import latest_path, plan_metrics
 from flexcast.settlement import LONDON
 from flexcast.storage import Storage
 
@@ -72,7 +72,9 @@ def _tomorrow() -> date:
 def create_app(
     storage: Storage | None = None, load_history: Callable[[], History] | None = None
 ) -> FastAPI:
-    store = storage or Storage(Settings().data_uri)
+    settings = Settings()
+    store = storage or Storage(settings.data_uri)
+    latest = latest_path(settings.market)
     history = load_history or (lambda: History.load(store))
     app = FastAPI(title="flexcast", description="Battery schedules from GB price forecasts.")
 
@@ -88,10 +90,10 @@ def create_app(
     @app.get("/health")
     def health() -> Health:
         try:
-            latest = store.read_text(LATEST).strip() if store.exists(LATEST) else None
+            model = store.read_text(latest).strip() if store.exists(latest) else None
         except Exception as e:  # storage unreachable: unhealthy, not a 500 with a stack trace
             raise HTTPException(503, f"storage unavailable: {e}") from e
-        return Health(status="ok", latest_model=latest)
+        return Health(status="ok", latest_model=model)
 
     @app.get("/schedule")
     def schedule(date: DateParam = None) -> ScheduleOut:
@@ -109,6 +111,6 @@ def create_app(
         days: Annotated[int, Query(ge=1, le=366)] = 30,
     ) -> Metrics:
         last = end or datetime.now(UTC).astimezone(LONDON).date()
-        return Metrics.model_validate(plan_metrics(history(), store, last, days))
+        return Metrics.model_validate(plan_metrics(history(), store, last, days, settings.market))
 
     return app

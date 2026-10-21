@@ -32,7 +32,13 @@ def client(storage: Storage, history: History) -> TestClient:
 
 @pytest.fixture
 def planned(history: History, storage: Storage) -> None:
-    train(history, storage, as_of=datetime(2025, 6, 24, 12, tzinfo=UTC), git_sha="t")
+    train(
+        history,
+        storage,
+        as_of=datetime(2025, 6, 24, 12, tzinfo=UTC),
+        git_sha="t",
+        market="day_ahead",
+    )
     plan(history, storage, TARGET, Settings())
 
 
@@ -43,7 +49,9 @@ def test_health_before_any_model(client: TestClient) -> None:
 
 
 def test_health_reports_latest_model(client: TestClient, planned: None) -> None:
-    assert client.get("/health").json()["latest_model"].startswith("models/lgbm_quantile/")
+    assert (
+        client.get("/health").json()["latest_model"].startswith("models/day_ahead/lgbm_quantile/")
+    )
 
 
 def test_schedule(client: TestClient, planned: None) -> None:

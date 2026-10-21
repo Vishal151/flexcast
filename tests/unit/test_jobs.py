@@ -8,7 +8,7 @@ import pytest
 
 from flexcast.config import Settings
 from flexcast.history import History
-from flexcast.jobs import LATEST, load_latest_model, plan, plan_metrics, train
+from flexcast.jobs import latest_path, load_latest_model, plan, plan_metrics, train
 from flexcast.settlement import period_starts
 from flexcast.storage import Storage
 
@@ -28,23 +28,36 @@ def history(synthetic_history: HistoryFactory) -> History:
 
 @pytest.fixture
 def trained(history: History, storage: Storage) -> str:
-    return train(history, storage, as_of=datetime(2025, 6, 24, 12, tzinfo=UTC), git_sha="abc123")
+    return train(
+        history,
+        storage,
+        as_of=datetime(2025, 6, 24, 12, tzinfo=UTC),
+        git_sha="abc123",
+        market="day_ahead",
+    )
 
 
 def test_train_saves_model_with_metadata_and_latest_pointer(trained: str, storage: Storage) -> None:
-    # At 12:00Z on 24 June every price of 23 June is known (last one at 23:30Z on the 23rd).
-    assert trained == "models/lgbm_quantile/train_end=2025-06-23"
-    assert storage.read_text(LATEST).strip() == trained
+    # Day-ahead: at 12:00Z on 24 June, the auction prices for 25 June were published that morning.
+    assert trained == "models/day_ahead/lgbm_quantile/train_end=2025-06-25"
+    assert storage.read_text(latest_path("day_ahead")).strip() == trained
     meta = json.loads(storage.read_text(f"{trained}/metadata.json"))
     assert meta["git_sha"] == "abc123"
-    assert meta["train_window"] == ["2025-06-01", "2025-06-23"]
-    assert meta["rows"] == 23 * 48
-    assert load_latest_model(storage)[1] == trained
+    assert meta["train_window"] == ["2025-06-01", "2025-06-25"]
+    assert meta["rows"] == 25 * 48
+    assert meta["market"] == "day_ahead"
+    assert load_latest_model(storage, "day_ahead")[1] == trained
 
 
 def test_train_without_complete_days_fails_clearly(history: History, storage: Storage) -> None:
     with pytest.raises(ValueError, match="no complete days"):
-        train(history, storage, as_of=datetime(2025, 5, 1, tzinfo=UTC), git_sha="x")
+        train(
+            history,
+            storage,
+            as_of=datetime(2025, 5, 1, tzinfo=UTC),
+            git_sha="x",
+            market="day_ahead",
+        )
 
 
 def test_plan_without_a_model_fails_clearly(history: History, storage: Storage) -> None:
@@ -132,3 +145,15 @@ def test_plan_without_track_record_is_uncalibrated(
     assert (out.forecast["p90"] == out.forecast["raw_p90"]).all()
     meta = json.loads(storage.read_text(f"plans/date={TARGET}/plan.json"))
     assert meta["calibration_offsets"] == {}
+
+
+def test_day_ahead_plan_holds_one_power_level_per_hour(
+    history: History, storage: Storage, trained: str
+) -> None:
+    out = plan(history, storage, TARGET, Settings(market="day_ahead"))
+    s = out.schedule
+    for col in ("charge_kw", "discharge_kw"):
+        v = s[col].to_numpy()
+        assert abs(v[0::2] - v[1::2]).max() < 1e-6
+    meta = json.loads(storage.read_text(f"plans/date={TARGET}/plan.json"))
+    assert meta["market"] == "day_ahead"

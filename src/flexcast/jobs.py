@@ -1,8 +1,8 @@
 """The scheduled jobs' logic: train a model, plan tomorrow, and score past plans.
 
-Storage layout:
-  models/lgbm_quantile/train_end=<d>/   model files + metadata.json
-  models/lgbm_quantile/LATEST           prefix of the newest model (written last)
+Storage layout (<market> = day_ahead | imbalance, from settings):
+  models/<market>/lgbm_quantile/train_end=<d>/   model files + metadata.json
+  models/<market>/lgbm_quantile/LATEST           prefix of the newest model (written last)
   plans/date=<d>/forecast.parquet       p10/p50/p90 per period
   plans/date=<d>/schedule.parquet       charge/discharge/SoC per period
   plans/date=<d>/plan.json              decision time, model, alpha, expected £
@@ -17,8 +17,8 @@ import pandas as pd
 
 from flexcast.backtest import feature_table, training_cutoff
 from flexcast.config import Settings
-from flexcast.features import build, decision_time_for
-from flexcast.history import History
+from flexcast.features import DAY_AHEAD_MODEL_FEATURES, build, decision_time_for
+from flexcast.history import History, Market
 from flexcast.models.base import Model, load_model, save_model
 from flexcast.models.calibration import apply_offsets, fit_offsets
 from flexcast.models.registry import MODELS
@@ -27,7 +27,19 @@ from flexcast.settlement import period_starts
 from flexcast.storage import Storage
 
 MODEL = "lgbm_quantile"
-LATEST = f"models/{MODEL}/LATEST"
+
+
+def model_root(market: Market) -> str:
+    return f"models/{market}/{MODEL}"
+
+
+def latest_path(market: Market) -> str:
+    return f"{model_root(market)}/LATEST"
+
+
+def battery_for(market: Market) -> Battery:
+    """The day-ahead auction trades whole hours, so the battery holds one level per hour."""
+    return Battery(hourly_blocks=market == "day_ahead")
 
 
 @dataclass(frozen=True)
@@ -38,20 +50,23 @@ class Plan:
     expected_gbp: float
 
 
-def train(history: History, storage: Storage, as_of: datetime, git_sha: str) -> str:
+def train(history: History, storage: Storage, as_of: datetime, git_sha: str, market: Market) -> str:
     """Fit on every day whose prices were all known at `as_of`; returns the model's prefix."""
     from flexcast.models.lgbm import LGBMQuantile
 
     settings = Settings()
-    cutoff = training_cutoff(as_of)
-    days = sorted(d for d in set(history.prices["london_date"]) if d <= cutoff)
-    X, y, _ = feature_table(history, days, settings.decision_at) if days else (None, None, [])
+    cutoff = training_cutoff(as_of, market)
+    labels = history.prices if market == "imbalance" else history.day_ahead
+    days = sorted(d for d in set(labels["london_date"]) if d <= cutoff)
+    X, y, _ = (
+        feature_table(history, days, settings.decision_at, market) if days else (None, None, [])
+    )
     if X is None or y is None or X.empty:
         raise ValueError(f"no complete days of prices on or before {cutoff} to train on")
-    model = LGBMQuantile()
+    model = LGBMQuantile(features=DAY_AHEAD_MODEL_FEATURES if market == "day_ahead" else None)
     model.fit(X, y)
     trained = sorted(set(X.index.get_level_values("target_date")))
-    prefix = f"models/{MODEL}/train_end={cutoff}"
+    prefix = f"{model_root(market)}/train_end={cutoff}"
     save_model(
         storage,
         model,
@@ -62,23 +77,26 @@ def train(history: History, storage: Storage, as_of: datetime, git_sha: str) -> 
             "rows": len(X),
             "features": model.features,
             "as_of": as_of.isoformat(),
+            "market": market,
             "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
         },
     )
-    storage.write_text(prefix + "\n", LATEST)  # pointer last: readers never see a partial model
+    # Pointer last: readers never see a partial model.
+    storage.write_text(prefix + "\n", latest_path(market))
     return prefix
 
 
-def load_latest_model(storage: Storage) -> tuple[Model, str]:
-    if not storage.exists(LATEST):
-        raise FileNotFoundError(f"no {LATEST}: run `flexcast train` first")
-    prefix = storage.read_text(LATEST).strip()
+def load_latest_model(storage: Storage, market: Market) -> tuple[Model, str]:
+    latest = latest_path(market)
+    if not storage.exists(latest):
+        raise FileNotFoundError(f"no {latest}: run `flexcast train` first")
+    prefix = storage.read_text(latest).strip()
     return load_model(storage, prefix, MODELS), prefix
 
 
 def plan(history: History, storage: Storage, target_date: date, settings: Settings) -> Plan:
     """Forecast target_date as of D-1 decision time and optimise the battery on it."""
-    model, model_prefix = load_latest_model(storage)
+    model, model_prefix = load_latest_model(storage, settings.market)
     decision_time = decision_time_for(target_date, settings.decision_at)
     features = build(history, decision_time, target_date)
     raw = model.predict(features.X)
@@ -86,7 +104,7 @@ def plan(history: History, storage: Storage, target_date: date, settings: Settin
     a = settings.risk_alpha
     buy = pred["p50"] + a * (pred["p90"] - pred["p50"])
     sell = pred["p50"] - a * (pred["p50"] - pred["p10"])
-    schedule = optimise(buy, Battery(), sell_prices=sell)
+    schedule = optimise(buy, battery_for(settings.market), sell_prices=sell)
 
     # Keep the raw quantiles too: tomorrow's calibration is fitted on the raw track record.
     forecast = pred.join(raw.add_prefix("raw_")).rename_axis("start_time").reset_index()
@@ -99,6 +117,7 @@ def plan(history: History, storage: Storage, target_date: date, settings: Settin
         "target_date": str(target_date),
         "decision_time": decision_time.astimezone(UTC).isoformat(),
         "model": model_prefix,
+        "market": settings.market,
         "risk_alpha": a,
         "calibration_offsets": offsets,
         "expected_gbp": schedule.objective_gbp,
@@ -116,13 +135,15 @@ def _calibrate(
     window = settings.calibration_window_days
     if window <= 0:
         return raw, {}
-    last_known = training_cutoff(decision_time_for(target_date, settings.decision_at))
+    last_known = training_cutoff(
+        decision_time_for(target_date, settings.decision_at), settings.market
+    )
     first = last_known - timedelta(days=window - 1)
     past = []
     for d in planned_dates(storage):
         if not first <= d <= last_known:
             continue
-        actual = history.actual_prices(d)
+        actual = history.actual_prices(d, settings.market)
         if len(actual) != len(period_starts(d)):
             continue
         f = storage.read_parquet(f"plans/date={d}/forecast.parquet").set_index("start_time")
@@ -152,14 +173,16 @@ def planned_dates(storage: Storage) -> list[date]:
     )
 
 
-def plan_metrics(history: History, storage: Storage, end: date, days: int) -> dict[str, Any]:
+def plan_metrics(
+    history: History, storage: Storage, end: date, days: int, market: Market = "day_ahead"
+) -> dict[str, Any]:
     """Score plans for target dates in (end - days, end] that have complete actual prices."""
-    battery = Battery()
+    battery = battery_for(market)
     rows = []
     for d in planned_dates(storage):
         if not end - timedelta(days=days) < d <= end:
             continue
-        actual = history.actual_prices(d)
+        actual = history.actual_prices(d, market)
         if len(actual) != len(period_starts(d)):
             continue
         prefix = f"plans/date={d}"

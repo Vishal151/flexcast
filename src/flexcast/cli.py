@@ -251,7 +251,7 @@ def train(
     when = datetime.fromisoformat(as_of) if as_of else datetime.now(UTC)
     if when.tzinfo is None:
         raise typer.BadParameter("--as-of must include a timezone, e.g. 2025-10-28T12:00:00+00:00")
-    prefix = train_model(History.load(storage), storage, when, settings.git_sha)
+    prefix = train_model(History.load(storage), storage, when, settings.git_sha, settings.market)
     typer.echo(f"trained {prefix}")
 
 
