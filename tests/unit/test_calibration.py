@@ -1,9 +1,11 @@
+from collections.abc import Callable
 from datetime import date, timedelta
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from flexcast.history import History
 from flexcast.models.calibration import apply_offsets, fit_offsets, rolling_calibration
 from flexcast.settlement import period_starts
 
@@ -107,3 +109,29 @@ def test_band_crossing_p50_is_clamped_not_reordered() -> None:
     fixed = apply_offsets(past, offsets)
     pd.testing.assert_series_equal(fixed["p50"], past["p50"])  # untouched
     assert (fixed["p90"] == fixed["p50"]).all()
+
+
+def test_add_calibrated_then_risk_aware_like_the_cli(
+    synthetic_history: Callable[[date, date], History],
+) -> None:
+    from flexcast.backtest import BacktestConfig, add_risk_aware, run
+    from flexcast.models.baselines import NaiveLastDay
+    from flexcast.models.calibration import add_calibrated
+    from flexcast.optimise import Battery
+
+    history = synthetic_history(date(2025, 6, 1), date(2025, 6, 27))
+    cfg = BacktestConfig(
+        test_start=date(2025, 6, 22),
+        test_end=date(2025, 6, 26),
+        train_start=date(2025, 6, 12),
+        validation_days=6,
+    )
+    result = run(history, cfg, {"m": NaiveLastDay})
+    add_calibrated(
+        result, Battery(), "m", "m_cal", window_days=5, hours_per_block=None, adjust=("p10", "p90")
+    )
+    assert "m_cal" in set(result.validation_forecasts["strategy"])
+    assert "m_cal" in set(result.forecasts["strategy"])
+    assert result.forecasts.query("strategy == 'm_cal'")["target_date"].min() == cfg.test_start
+    risk = add_risk_aware(result, Battery(), "m_cal", (0.0, 0.5), "m_risk")
+    assert risk.base == "m_cal" and "m_risk" in set(result.daily["strategy"])

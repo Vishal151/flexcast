@@ -95,13 +95,16 @@ def add_calibrated(
     hours_per_block: int | None,
     adjust: tuple[str, ...],
 ) -> None:
-    """Add `name` (calibrated `base`) to the test results; the validation window's forecasts
-    supply the track record for the first test days."""
+    """Add `name` (calibrated `base`) to both the validation and the test forecasts, so later
+    steps (e.g. choosing the risk-aware alpha on validation) can use it. Each day's offsets come
+    only from days known at its decision time, so validation days calibrate test days."""
+    test_start = result.forecasts["target_date"].min()
     every = pd.concat([result.validation_forecasts, result.forecasts], ignore_index=True)
     calibrated = rolling_calibration(every, base, name, window_days, hours_per_block, adjust)
-    rows = calibrated[
-        (calibrated.strategy == name)
-        & (calibrated.target_date >= result.forecasts.target_date.min())
-    ]
-    result.forecasts = pd.concat([result.forecasts, rows], ignore_index=True)
-    result.daily = pd.concat([result.daily, valuate(rows, battery)], ignore_index=True)
+    rows = calibrated[calibrated["strategy"] == name]
+    is_test = rows["target_date"] >= test_start
+    result.validation_forecasts = pd.concat(
+        [result.validation_forecasts, rows[~is_test]], ignore_index=True
+    )
+    result.forecasts = pd.concat([result.forecasts, rows[is_test]], ignore_index=True)
+    result.daily = pd.concat([result.daily, valuate(rows[is_test], battery)], ignore_index=True)
