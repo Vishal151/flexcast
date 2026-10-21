@@ -196,9 +196,15 @@ def backtest(
             {
                 "lgbm": lgbm_model.config(),
                 "risk_alpha": risk.alpha,
+                "calibration": {
+                    "window_days": settings.calibration_window_days,
+                    "hours_per_block": settings.calibration_hours_per_block,
+                    "adjust": settings.calibration_adjust,
+                },
                 "battery": vars(cfg.battery),
             },
-            {str(k): v for k, v in summary.loc["lgbm_quantile"].round(4).items()},
+            # What production runs: (calibrated) forecast + risk-aware alpha on top.
+            {str(k): v for k, v in summary.loc[risk.strategy].round(4).items()},
             window=f"{cfg.test_start}..{cfg.test_end}",
             git_sha=settings.git_sha,
         )
