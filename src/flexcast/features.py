@@ -42,6 +42,26 @@ FEATURE_COLUMNS = [
     "wind_age_h",
     "residual_demand",
 ]
+# Stage 2c checkpoint B: NESO embedded (distribution-connected) solar and wind forecasts.
+EMBEDDED_COLUMNS = [
+    "solar",
+    "solar_capacity_factor",
+    "embedded_wind",
+    "embedded_age_h",
+]
+ALL_COLUMNS = FEATURE_COLUMNS + EMBEDDED_COLUMNS
+# Stage 2c checkpoint D: day-ahead auction prices. Yesterday's are published at 10:00 on D-2,
+# so at the D-1 09:00 decision the latest complete day is D-1 (not D-2 as for imbalance prices).
+DAY_AHEAD_COLUMNS = [
+    "da_d1",
+    "da_d7",
+    "da_d1_mean",
+    "da_d1_min",
+    "da_d1_max",
+    "da_roll7_mean",
+]
+OUTPUT_COLUMNS = ALL_COLUMNS + DAY_AHEAD_COLUMNS
+DAY_AHEAD_MODEL_FEATURES = ALL_COLUMNS + DAY_AHEAD_COLUMNS
 
 
 @dataclass(frozen=True)
@@ -153,8 +173,30 @@ def build(history: History, decision_time: datetime, target_date: date) -> Featu
     X["wind_age_h"] = _age_hours(decision, wind["publish_time"].reindex(hour_of))
     X["residual_demand"] = X["ndf"] - X["wind"]
 
+    # Embedded solar/wind: per-period latest vintage, like NDF.
+    emb = history.as_of("embedded", decision_time, target_date)
+    emb = prov.use("embedded", _latest_per_start(emb)).set_index("start_time").reindex(starts)
+    X["solar"] = emb["solar_mw"].to_numpy(dtype=float)
+    X["solar_capacity_factor"] = (emb["solar_mw"] / emb["solar_capacity_mw"]).to_numpy(dtype=float)
+    X["embedded_wind"] = emb["wind_mw"].to_numpy(dtype=float)
+    X["embedded_age_h"] = _age_hours(decision, emb["publish_time"])
+
+    # Day-ahead auction prices, matched on London clock time like the imbalance lags.
+    da = history.as_of("day_ahead", decision_time)
+    da_d1 = _same_time(da, target_date - timedelta(days=1), prov, "day_ahead")
+    X["da_d1"] = hhmm.map(da_d1).to_numpy(dtype=float)
+    X["da_d7"] = hhmm.map(
+        _same_time(da, target_date - timedelta(days=7), prov, "day_ahead")
+    ).to_numpy(dtype=float)
+    X["da_d1_mean"] = da_d1.mean()
+    X["da_d1_min"] = da_d1.min()
+    X["da_d1_max"] = da_d1.max()
+    da_week = [target_date - timedelta(days=k) for k in range(1, 8)]
+    da_roll = prov.use("day_ahead", da[da["london_date"].isin(da_week)]).groupby("hhmm")["price"]
+    X["da_roll7_mean"] = hhmm.map(da_roll.mean()).to_numpy(dtype=float)
+
     return Features(
-        X=X[FEATURE_COLUMNS],
+        X=X[OUTPUT_COLUMNS],
         provenance=prov.latest,
         decision_time=decision_time,
         target_date=target_date,

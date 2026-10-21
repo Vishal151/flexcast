@@ -22,12 +22,24 @@ def ingest_fixtures() -> None:
     for d in SAMPLE_DAYS:
         ok(
             run_job(
-                "ingest", "--start", d, "--end", d, "--datasets", "system_prices,mid,fuelhh,agile"
+                "ingest",
+                "--start",
+                d,
+                "--end",
+                d,
+                "--datasets",
+                "system_prices,mid,fuelhh,agile,day_ahead",
             )
         )
     ok(
         run_job(
-            "ingest", "--start", "2025-06-09", "--end", "2025-06-10", "--datasets", "ndf,windfor"
+            "ingest",
+            "--start",
+            "2025-06-09",
+            "--end",
+            "2025-06-10",
+            "--datasets",
+            "ndf,windfor,embedded",
         )
     )
 
@@ -87,11 +99,12 @@ def get(url: str) -> tuple[int, Any]:
 def test_ingest_lands_partitions_in_gcs(pipeline: dict[str, Any]) -> None:
     files = set(pipeline["first"])
     for d in SAMPLE_DAYS:
-        for ds in ("system_prices", "mid", "fuelhh", "agile"):
+        for ds in ("system_prices", "mid", "fuelhh", "agile", "day_ahead"):
             assert f"raw/{ds}/date={d}/part.parquet" in files
     for d in ("2025-06-09", "2025-06-10"):
         assert f"raw/ndf/date={d}/part.parquet" in files
         assert f"raw/windfor/date={d}/part.parquet" in files
+        assert f"raw/embedded/date={d}/part.parquet" in files
     assert not [f for f in files if ".tmp" in f]
 
 
@@ -105,7 +118,7 @@ def test_dst_partition_has_46_periods(bucket: Storage, pipeline: dict[str, Any])
 
 
 def test_train_and_plan_write_artefacts(bucket: Storage, pipeline: dict[str, Any]) -> None:
-    latest = bucket.read_text("models/lgbm_quantile/LATEST").strip()
+    latest = bucket.read_text("models/day_ahead/lgbm_quantile/LATEST").strip()
     assert latest in pipeline["train"]
     assert bucket.exists(f"{latest}/p50.txt") and bucket.exists(f"{latest}/metadata.json")
     for f in ("forecast.parquet", "schedule.parquet", "plan.json"):
@@ -125,7 +138,7 @@ def test_failed_upstream_fails_the_job() -> None:
 
 def test_health_reports_model(api: str) -> None:
     status, body = get(f"{api}/health")
-    assert status == 200 and body["latest_model"].startswith("models/lgbm_quantile/")
+    assert status == 200 and body["latest_model"].startswith("models/day_ahead/lgbm_quantile/")
 
 
 def test_schedule_contract(api: str) -> None:

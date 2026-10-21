@@ -10,6 +10,7 @@ LONDON = ZoneInfo("Europe/London")
 BASE_URLS = {
     "elexon": "https://data.elexon.co.uk/bmrs/api/v1",
     "octopus": "https://api.octopus.energy/v1",
+    "neso": "https://api.neso.energy/api/3/action",
 }
 
 DAYS = {
@@ -92,4 +93,35 @@ def requests() -> list[Request]:
         ),
         Request("octopus_agile_product", "octopus", f"/products/{AGILE_PRODUCT}/"),
     ]
+    return reqs + neso_requests()
+
+
+def neso_requests() -> list[Request]:
+    """Embedded solar/wind vintages for the publish windows features need (Stage 2c)."""
+    from flexcast.sources.neso import PACKAGE, NesoClient, embedded_sql
+
+    archives = NesoClient(BASE_URLS["neso"]).archive_resources()
+    reqs = [Request("neso_embedded_package", "neso", "/package_show", {"id": PACKAGE})]
+    for label, d in [
+        ("normal_pub_d-2", date(2025, 6, 9)),
+        ("normal_pub_d-1", date(2025, 6, 10)),
+        ("autumn_dst_pub_d-1", date(2025, 10, 25)),
+    ]:
+        start, end = london_day_utc(d)
+        sql = embedded_sql(archives[start.year], start, end)
+        reqs.append(
+            Request(f"neso_embedded_{label}", "neso", "/datastore_search_sql", {"sql": sql})
+        )
+    from flexcast.sources.neso import DAY_AHEAD_PACKAGE, day_ahead_sql
+
+    da_resource = "4f27eea5-7038-4f73-9740-e3e4ad47c26a"  # recorded resource; client discovers it
+    reqs.append(
+        Request("neso_day_ahead_package", "neso", "/package_show", {"id": DAY_AHEAD_PACKAGE})
+    )
+    for kind, d in DAYS.items():
+        start, end = london_day_utc(d)
+        sql = day_ahead_sql(da_resource, start.date(), (end - timedelta(seconds=1)).date())
+        reqs.append(
+            Request(f"neso_day_ahead_{kind}", "neso", "/datastore_search_sql", {"sql": sql})
+        )
     return reqs

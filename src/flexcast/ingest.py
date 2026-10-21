@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from flexcast.settlement import LONDON, london_day_bounds
 from flexcast.sources.elexon import ElexonClient
 from flexcast.sources.http import Parsed
+from flexcast.sources.neso import NesoClient
 from flexcast.sources.octopus import OctopusClient
 from flexcast.storage import Storage
 
@@ -46,6 +47,8 @@ DATASETS = {
         Dataset("ndf", ("publish_time", "start_time"), "publish_time"),
         Dataset("windfor", ("publish_time", "start_time"), "publish_time"),
         Dataset("agile", ("valid_from", "product_code", "region"), "valid_from"),
+        Dataset("embedded", ("publish_time", "start_time"), "publish_time"),
+        Dataset("day_ahead", ("start_time",), "start_time"),
     ]
 }
 
@@ -85,11 +88,17 @@ def _partition_date(value: Any) -> date:
 
 class Ingester:
     def __init__(
-        self, storage: Storage, elexon: ElexonClient, octopus: OctopusClient, region: str
+        self,
+        storage: Storage,
+        elexon: ElexonClient,
+        octopus: OctopusClient,
+        region: str,
+        neso: NesoClient,
     ) -> None:
         self.storage = storage
         self.elexon = elexon
         self.octopus = octopus
+        self.neso = neso
         self.region = region
         self._tariffs: dict[str, str] = {}
         self._fetchers: dict[str, Callable[[date], Records]] = {
@@ -99,7 +108,14 @@ class Ingester:
             "ndf": lambda d: _records(self.elexon.ndf(*london_day_bounds(d))),
             "windfor": lambda d: _records(self.elexon.windfor(*london_day_bounds(d))),
             "agile": self._agile,
+            "embedded": self._embedded,
+            "day_ahead": lambda d: _records(self.neso.day_ahead_prices(*london_day_bounds(d))),
         }
+
+    def _embedded(self, d: date) -> Records:
+        parsed = self.neso.embedded_forecasts(*london_day_bounds(d))
+        # period_end_gmt only exists to cross-check start_time; don't store it.
+        return [r.model_dump(exclude={"period_end_gmt"}) for r in parsed.rows], parsed.rejects
 
     def _agile(self, d: date) -> Records:
         start, end = london_day_bounds(d)

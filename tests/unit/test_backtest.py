@@ -114,12 +114,14 @@ def test_summarise_and_worst_days_hand_values() -> None:
             "value_gbp": [2.0, 4.0, 1.0, 2.0],
             "mae": [0.0, 0.0, 10.0, 20.0],
             "pinball": [0.0, 0.0, 1.0, 3.0],
+            "coverage_80": [1.0, 1.0, 0.5, 0.7],
         }
     )
     s = summarise(daily)
     assert s.loc["m", "pct_of_perfect"] == pytest.approx(50.0)
     assert s.loc["m", "gbp_per_year"] == pytest.approx(1.5 * 365)
     assert s.loc["m", "mae"] == 15.0 and s.loc["m", "pinball"] == 2.0
+    assert s["coverage_80"]["m"] == pytest.approx(0.6)
     w = worst_days(daily, "m", n=1)
     assert list(w.index) == [date(2025, 1, 2)] and w["shortfall_gbp"].iloc[0] == 2.0
 
@@ -168,3 +170,40 @@ def test_select_alpha_picks_best_validation_alpha(history: History) -> None:
     gbp = grid["gbp_per_year"]
     assert float(gbp["alpha=0"]) < float(gbp["alpha=0.25"])
     pd.testing.assert_frame_equal(grid, alpha_grid(val, CFG.battery, "bad", alphas))
+
+
+def test_run_reuses_a_prepared_feature_table(history: History) -> None:
+    from flexcast.backtest import days_between, feature_table
+
+    table = feature_table(history, days_between(CFG.train_start, CFG.test_end), CFG.decision_at)
+    a = run(history, CFG, {"naive": NaiveLastDay}).daily
+    b = run(history, CFG, {"naive": NaiveLastDay}, table=table).daily
+    pd.testing.assert_frame_equal(a, b)
+
+
+# --- day-ahead market ------------------------------------------------------------------------
+
+
+def test_training_cutoff_day_ahead_is_d_minus_1() -> None:
+    summer = datetime(2025, 6, 10, 8, 0, tzinfo=UTC)  # D-1 09:00 BST for D = 11 June
+    assert training_cutoff(summer, "day_ahead") == date(2025, 6, 10)  # published 9 June noon
+    assert training_cutoff(summer, "imbalance") == date(2025, 6, 9)
+
+
+def test_day_ahead_backtest_trains_up_to_d_minus_1_and_respects_hour_blocks(
+    history: History,
+) -> None:
+    from dataclasses import replace
+
+    from flexcast.models.baselines import NaiveDayAhead
+    from flexcast.optimise import Battery
+
+    SpyModel.fits.clear()
+    cfg = replace(CFG, market="day_ahead", battery=Battery(hourly_blocks=True))
+    res = run(history, cfg, {"spy": SpyModel, "naive_da": NaiveDayAhead})
+    first_retrain_last_day = SpyModel.fits[0][1]
+    assert first_retrain_last_day == date(2025, 6, 16)  # D-1 for D = 17 June
+    perfect = res.forecasts[res.forecasts.strategy == "perfect"]
+    assert (perfect["actual"].to_numpy()[0::2] == perfect["actual"].to_numpy()[1::2]).all()
+    wide = res.daily.pivot(index="target_date", columns="strategy", values="value_gbp")
+    assert (wide["naive_da"] <= wide["perfect"] + 1e-6).all()

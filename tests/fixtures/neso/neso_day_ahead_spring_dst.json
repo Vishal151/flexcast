@@ -1,0 +1,143 @@
+{
+  "help": "https://api.neso.energy/api/3/action/help_show?name=datastore_search_sql",
+  "success": true,
+  "result": {
+    "records": [
+      {
+        "Date": "2025-03-30",
+        "Price": "5.200000",
+        "Delivery Period": "00:00 - 01:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "0.010000",
+        "Delivery Period": "01:00 - 02:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "0.000000",
+        "Delivery Period": "02:00 - 03:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "0.000000",
+        "Delivery Period": "03:00 - 04:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "-0.880000",
+        "Delivery Period": "04:00 - 05:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "-2.670000",
+        "Delivery Period": "05:00 - 06:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "-0.210000",
+        "Delivery Period": "06:00 - 07:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "-3.000000",
+        "Delivery Period": "07:00 - 08:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "-4.600000",
+        "Delivery Period": "08:00 - 09:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "-4.940000",
+        "Delivery Period": "09:00 - 10:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "-5.650000",
+        "Delivery Period": "10:00 - 11:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "-6.380000",
+        "Delivery Period": "11:00 - 12:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "-2.000000",
+        "Delivery Period": "12:00 - 13:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "-2.080000",
+        "Delivery Period": "13:00 - 14:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "0.000000",
+        "Delivery Period": "14:00 - 15:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "39.880000",
+        "Delivery Period": "15:00 - 16:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "86.500000",
+        "Delivery Period": "16:00 - 17:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "103.510000",
+        "Delivery Period": "17:00 - 18:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "104.010000",
+        "Delivery Period": "18:00 - 19:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "128.740000",
+        "Delivery Period": "19:00 - 20:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "113.880000",
+        "Delivery Period": "20:00 - 21:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "91.670000",
+        "Delivery Period": "21:00 - 22:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "90.390000",
+        "Delivery Period": "22:00 - 23:00"
+      },
+      {
+        "Date": "2025-03-30",
+        "Price": "82.520000",
+        "Delivery Period": "23:00 - 00:00"
+      }
+    ],
+    "fields": [
+      {
+        "type": "date",
+        "id": "Date"
+      },
+      {
+        "type": "text",
+        "id": "Delivery Period"
+      },
+      {
+        "type": "numeric",
+        "id": "Price"
+      }
+    ],
+    "sql": "SELECT \"Date\", \"Delivery Period\", \"Price\" FROM \"4f27eea5-7038-4f73-9740-e3e4ad47c26a\" WHERE \"Date\" >= '2025-03-30' AND \"Date\" <= '2025-03-30' ORDER BY \"Date\", \"Delivery Period\""
+  }
+}

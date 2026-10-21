@@ -160,3 +160,23 @@ def test_sell_prices_must_align() -> None:
     prices = day_prices(spiky_prices())
     with pytest.raises(ValueError, match="sell_prices"):
         optimise(prices, sell_prices=prices.iloc[:-1])
+
+
+# --- hourly blocks (day-ahead auction trades whole hours) ------------------------------------
+
+
+@pytest.mark.parametrize(("day", "n"), [("2025-06-11", 48), ("2025-03-30", 46), ("2025-10-26", 50)])
+def test_hourly_blocks_hold_power_constant_within_each_hour(day: str, n: int) -> None:
+    b = Battery(hourly_blocks=True)
+    f = optimise(day_prices(spiky_prices(n), day), b).frame
+    assert (pd.DatetimeIndex(f.index).minute[0::2] == 0).all()  # UTC hours start on even rows
+    for col in ("charge_kw", "discharge_kw"):
+        v = f[col].to_numpy()
+        np.testing.assert_allclose(v[0::2], v[1::2], atol=TOL)
+
+
+def test_hourly_blocks_can_only_earn_less_or_equal() -> None:
+    prices = day_prices(spiky_prices())
+    free = optimise(prices, Battery()).objective_gbp
+    blocked = optimise(prices, Battery(hourly_blocks=True)).objective_gbp
+    assert blocked <= free + TOL

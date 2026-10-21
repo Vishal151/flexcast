@@ -12,6 +12,7 @@ from flexcast.config import Settings
 from flexcast.ingest import DATASETS, Ingester, merge
 from flexcast.settlement import LONDON
 from flexcast.sources.elexon import ElexonClient
+from flexcast.sources.neso import NesoClient
 from flexcast.sources.octopus import OctopusClient
 from flexcast.storage import Storage
 
@@ -20,6 +21,7 @@ NORMAL, SPRING, AUTUMN = date(2025, 6, 11), date(2025, 3, 30), date(2025, 10, 26
 DAYS = {NORMAL: 48, SPRING: 46, AUTUMN: 50}
 # The fixtures hold publish windows for D-1 and D-2 of each sample day.
 FORECAST_DAYS = [date(2025, 6, 10), date(2025, 6, 9), date(2025, 3, 29), date(2025, 10, 25)]
+EMBEDDED_DAYS = [date(2025, 6, 9), date(2025, 6, 10), date(2025, 10, 25)]
 
 
 @pytest.fixture
@@ -30,15 +32,21 @@ def storage(tmp_path: Path) -> Storage:
 @pytest.fixture
 def ingester(storage: Storage) -> Ingester:
     return Ingester(
-        storage, ElexonClient(S.elexon_base_url), OctopusClient(S.octopus_base_url), region="C"
+        storage,
+        ElexonClient(S.elexon_base_url),
+        OctopusClient(S.octopus_base_url),
+        region="C",
+        neso=NesoClient(S.neso_base_url),
     )
 
 
 def ingest_all_fixtures(ing: Ingester) -> None:
     for d in DAYS:
-        ing.ingest_day(d, ["system_prices", "mid", "fuelhh", "agile"])
+        ing.ingest_day(d, ["system_prices", "mid", "fuelhh", "agile", "day_ahead"])
     for d in FORECAST_DAYS:
         ing.ingest_day(d, ["ndf", "windfor"])
+    for d in EMBEDDED_DAYS:
+        ing.ingest_day(d, ["embedded"])
 
 
 def tree_hashes(root: Path) -> dict[str, str]:
@@ -56,7 +64,7 @@ def test_rerun_produces_identical_files(
     first = tree_hashes(tmp_path)
     ingest_all_fixtures(ingester)
     assert tree_hashes(tmp_path) == first
-    assert len(first) == 4 * len(DAYS) + 2 * len(FORECAST_DAYS)
+    assert len(first) == 5 * len(DAYS) + 2 * len(FORECAST_DAYS) + len(EMBEDDED_DAYS)
 
 
 @pytest.mark.parametrize(("d", "n"), DAYS.items())
@@ -146,3 +154,23 @@ def test_default_range_is_yesterday_and_today() -> None:
 
     now = datetime(2025, 6, 10, 23, 30, tzinfo=UTC)  # already 11 June in London
     assert default_range(now) == (date(2025, 6, 10), date(2025, 6, 11))
+
+
+def test_embedded_partition_has_derived_utc_start_times(
+    upstream: respx.MockRouter, ingester: Ingester, storage: Storage
+) -> None:
+    ingester.ingest_day(date(2025, 6, 10), ["embedded"])
+    df = storage.read_parquet("raw/embedded/date=2025-06-10/part.parquet")
+    assert {"publish_time", "start_time", "solar_mw", "solar_capacity_mw", "wind_mw"} <= set(df)
+    assert "period_end_gmt" not in df
+    assert str(df["start_time"].dt.tz) == "UTC" and str(df["publish_time"].dt.tz) == "UTC"
+    assert not df.duplicated(["publish_time", "start_time"]).any()
+
+
+@pytest.mark.parametrize(("d", "hours"), [(NORMAL, 24), (SPRING, 23), (AUTUMN, 25)])
+def test_day_ahead_partition_is_one_london_day(
+    upstream: respx.MockRouter, ingester: Ingester, storage: Storage, d: date, hours: int
+) -> None:
+    ingester.ingest_day(d, ["day_ahead"])
+    df = storage.read_parquet(f"raw/day_ahead/date={d}/part.parquet")
+    assert len(df) == hours and str(df["start_time"].dt.tz) == "UTC"

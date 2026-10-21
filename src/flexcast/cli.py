@@ -14,6 +14,7 @@ from flexcast.optimise import optimise as run_optimiser
 from flexcast.prices import PriceSource, load_day_prices
 from flexcast.settlement import LONDON
 from flexcast.sources.elexon import ElexonClient
+from flexcast.sources.neso import NesoClient
 from flexcast.sources.octopus import OctopusClient
 from flexcast.storage import Storage
 
@@ -48,6 +49,7 @@ def ingest(
         ElexonClient(settings.elexon_base_url),
         OctopusClient(settings.octopus_base_url),
         region=settings.agile_region,
+        neso=NesoClient(settings.neso_base_url),
     )
     failed = ingester.run(first, last, names, concurrency=settings.http_concurrency)
     if failed:
@@ -106,14 +108,35 @@ def backtest(
     test_end: Annotated[str | None, typer.Option(help="Default: last day with prices")] = None,
     train_start: Annotated[str | None, typer.Option(help="Default: first day with prices")] = None,
     report_uri: Annotated[str, typer.Option(help="Where results.md/png go")] = "file://./docs",
+    experiment: Annotated[
+        str | None, typer.Option(help="Log this run to experiments/ under this name")
+    ] = None,
+    description: Annotated[str, typer.Option(help="One line for the experiment log")] = "",
+    market: Annotated[str, typer.Option(help="imbalance | day_ahead")] = "imbalance",
 ) -> None:
     """Rolling-origin backtest of all models; writes the report and the last LightGBM model."""
+    if market not in ("imbalance", "day_ahead"):
+        raise typer.BadParameter("market must be 'imbalance' or 'day_ahead'")
     from flexcast import report
-    from flexcast.backtest import BacktestConfig, add_risk_aware, run, sensitivity, summarise
+    from flexcast.backtest import (
+        BacktestConfig,
+        ModelFactory,
+        add_risk_aware,
+        run,
+        sensitivity,
+        summarise,
+    )
+    from flexcast.features import DAY_AHEAD_MODEL_FEATURES
     from flexcast.history import History
     from flexcast.models.base import save_model
-    from flexcast.models.baselines import NaiveLastDay, SeasonalNaive
+    from flexcast.models.baselines import (
+        NaiveDayAhead,
+        NaiveLastDay,
+        SeasonalNaive,
+        SeasonalNaiveDayAhead,
+    )
     from flexcast.models.lgbm import LGBMQuantile
+    from flexcast.optimise import Battery as BatteryCfg
 
     settings = Settings()
     storage = Storage(settings.data_uri)
@@ -124,33 +147,56 @@ def backtest(
         test_start=date.fromisoformat(test_start) if test_start else last - timedelta(days=364),
         test_end=last,
         train_start=date.fromisoformat(train_start) if train_start else days.min(),
+        market="day_ahead" if market == "day_ahead" else "imbalance",
+        battery=BatteryCfg(hourly_blocks=market == "day_ahead"),
     )
-    result = run(
-        history,
-        cfg,
-        {
+    factories: dict[str, ModelFactory]
+    if cfg.market == "day_ahead":
+        factories = {
+            "naive_day_ahead": NaiveDayAhead,
+            "seasonal_naive_day_ahead": SeasonalNaiveDayAhead,
+            "lgbm_quantile": lambda: LGBMQuantile(features=DAY_AHEAD_MODEL_FEATURES),
+        }
+    else:
+        factories = {
             "naive_last_day": NaiveLastDay,
             "seasonal_naive": SeasonalNaive,
             "lgbm_quantile": LGBMQuantile,
-        },
-    )
+        }
+    result = run(history, cfg, factories)
+    base_strategy = "lgbm_quantile"
+    if settings.calibration_window_days > 0:
+        from flexcast.models.calibration import add_calibrated
+
+        add_calibrated(
+            result,
+            cfg.battery,
+            "lgbm_quantile",
+            "lgbm_calibrated",
+            settings.calibration_window_days,
+            settings.calibration_hours_per_block,
+            tuple(settings.calibration_adjust.split(",")),
+        )
+        base_strategy = "lgbm_calibrated"
     risk = add_risk_aware(
-        result, cfg.battery, "lgbm_quantile", (0.0, 0.25, 0.5, 0.75, 1.0), "lgbm_risk_aware"
+        result, cfg.battery, base_strategy, (0.0, 0.25, 0.5, 0.75, 1.0), "lgbm_risk_aware"
     )
     sens = sensitivity(result.forecasts, cfg.battery, (0.0, 0.01, 0.02, 0.04))
     summary = summarise(result.daily)
 
-    storage.write_parquet(result.daily, "backtest/daily.parquet")
-    storage.write_parquet(result.forecasts, "backtest/forecasts.parquet")
+    storage.write_parquet(result.daily, f"backtest/{market}/daily.parquet")
+    storage.write_parquet(result.forecasts, f"backtest/{market}/forecasts.parquet")
+    lgbm_model = result.models["lgbm_quantile"]
+    assert isinstance(lgbm_model, LGBMQuantile)
     train_end = result.train_window[1]
     save_model(
         storage,
         result.models["lgbm_quantile"],
-        f"models/lgbm_quantile/train_end={train_end}",
+        f"models/{market}/lgbm_quantile/train_end={train_end}",
         {
             "git_sha": settings.git_sha,
             "train_window": [str(d) for d in result.train_window],
-            "features": list(history_features()),
+            "features": lgbm_model.features,
             "backtest": summary.loc["lgbm_quantile"].round(4).to_dict(),
             "risk_alpha": risk.alpha,
             "backtest_risk_aware": summary.loc[risk.strategy].round(4).to_dict(),
@@ -158,13 +204,36 @@ def backtest(
         },
     )
     report.write(Storage(report_uri), result, cfg, sens, risk)
+    if experiment:
+        from flexcast.experiments import log_experiment
+
+        # Keep this experiment's outputs, so notebooks can compare runs later.
+        storage.write_parquet(result.daily, f"backtest/experiments/{experiment}/daily.parquet")
+        storage.write_parquet(
+            result.forecasts, f"backtest/experiments/{experiment}/forecasts.parquet"
+        )
+        save_model(storage, lgbm_model, f"backtest/experiments/{experiment}/model", {})
+        log_experiment(
+            Storage("file://./experiments"),
+            experiment,
+            description,
+            {
+                "market": market,
+                "lgbm": lgbm_model.config(),
+                "risk_alpha": risk.alpha,
+                "calibration": {
+                    "window_days": settings.calibration_window_days,
+                    "hours_per_block": settings.calibration_hours_per_block,
+                    "adjust": settings.calibration_adjust,
+                },
+                "battery": vars(cfg.battery),
+            },
+            # What production runs: (calibrated) forecast + risk-aware alpha on top.
+            {str(k): v for k, v in summary.loc[risk.strategy].round(4).items()},
+            window=f"{cfg.test_start}..{cfg.test_end}",
+            git_sha=settings.git_sha,
+        )
     typer.echo(summary.round(2).to_string())
-
-
-def history_features() -> list[str]:
-    from flexcast.features import FEATURE_COLUMNS
-
-    return FEATURE_COLUMNS
 
 
 @app.command()
@@ -182,7 +251,7 @@ def train(
     when = datetime.fromisoformat(as_of) if as_of else datetime.now(UTC)
     if when.tzinfo is None:
         raise typer.BadParameter("--as-of must include a timezone, e.g. 2025-10-28T12:00:00+00:00")
-    prefix = train_model(History.load(storage), storage, when, settings.git_sha)
+    prefix = train_model(History.load(storage), storage, when, settings.git_sha, settings.market)
     typer.echo(f"trained {prefix}")
 
 

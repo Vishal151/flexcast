@@ -10,14 +10,18 @@ Built as a portfolio and learning project for a full-stack data science role in 
 
 ## 1. Problem statement
 
-An aggregator controls a fleet of home batteries. Each day, before a decision deadline, it must commit a half-hourly charge/discharge schedule for the next day. Prices for that day are not yet known.
+An aggregator controls a fleet of home batteries. Each day it commits the next day's schedule in the **GB day-ahead auction** (N2EX: bids close 09:50 UK time on D-1, results by 10:00), so the decision is made at **D-1 09:00 London**, before that day's prices are known. The battery is paid the auction price for each hour it trades; it holds one power level per hour (the auction trades hourly products).
 
-The project answers three questions:
-1. How much is a battery worth with **perfect foresight** of prices? (upper bound)
+The project answers three questions, for the day-ahead market:
+1. How much is a battery worth with **perfect foresight** of the day-ahead prices? (upper bound)
 2. How much does it earn using **our forecast**? (what we can actually capture)
-3. How much does it earn using a **naive forecast** (the last complete day of prices known at decision time, i.e. D-2)? (the bar to beat)
+3. How much does it earn using a **naive forecast** (yesterday's day-ahead prices, published at 10:00 on D-2)? (the bar to beat)
 
-**Headline metric:** % of perfect-foresight value captured, vs naive. Forecast accuracy (MAE, pinball loss) is secondary — it only matters insofar as it moves £.
+**Comparison market:** the same three questions against the **imbalance (system) price**, the price a battery is exposed to if it trades nothing in advance. It is far less predictable a day ahead (Stage 2 and 2c), which is why operators lock in prices in advance. Re-trading the imbalance price after the auction is a stated next step, not built.
+
+**Headline metric:** % of perfect-foresight value captured, vs naive, per market. Forecast accuracy (MAE, pinball loss) is secondary — it only matters insofar as it moves £.
+
+*(Changed in Stage 2c checkpoint D; Stages 0–2 framed the problem against the imbalance price only.)*
 
 ### Simplifications (state these in the README)
 - Battery is a price-taker settled at the half-hourly system (imbalance) price. A real home battery can't access that price directly — only via an aggregator. That gap is the aggregator's business model; say so.
@@ -181,6 +185,15 @@ Each stage has a **learning goal**, a **build** list, **acceptance** criteria, a
 - Risk-aware schedule: plan buying at p50 + α(p90 − p50) and selling at p50 − α(p50 − p10); α chosen on a validation window before the test window (never on the test window). Does it beat p50 in £?
 **Accept:** leakage test passes; models round-trip through serialisation; `flexcast backtest` reproduces the table from a clean checkout.
 **Check yourself:** Which feature, if accidentally taken from the latest vintage, would inflate results most? Why might a lower-MAE model capture less £?
+
+### Stage 2c — Model development, notebook-led (added after Stage 4)
+**Learn:** how forecasting models are actually developed: exploration, error analysis, domain-driven features, tuning and calibration without touching the test set, and choosing the market the battery really trades in.
+**Build:**
+- `notebooks/`: jupytext-paired notebooks (`.py` percent format for review, `.ipynb` with outputs for reading). They import `src/flexcast`; findings move into the library and the backtest. `make notebooks` re-executes them.
+- Lightweight experiment log in the repo (`experiments/log.jsonl` + generated table): settings, data window, git SHA, £ and accuracy metrics. No MLflow.
+- Checkpoints: (A) explore prices + diagnose the current model; (B) embedded solar forecast as an input (NESO, vintaged); (C) hyperparameter tuning and quantile calibration on the validation window; (D) day-ahead auction framing: N2EX prices as the primary market (hourly blocks, naive = yesterday's auction prices), the imbalance price kept as the comparison market; train/plan switched to the day-ahead market.
+**Accept:** each checkpoint has a notebook that reads top to bottom, a log entry, passing tests (leakage test covers every new input), and an updated `docs/results.md`; the test window is only used to report, never to choose.
+**Check yourself:** Which input moved £ most, and why? Why must calibration be fitted on validation, not test? Which market should a home battery trade in, and what does that change about the decision time?
 
 ### Stage 3 — Containerise and emulate GCP locally (1 day)
 **Learn:** Docker multi-stage builds; compose; env-driven config; emulators; integration testing.

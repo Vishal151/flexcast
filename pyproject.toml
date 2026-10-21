@@ -29,6 +29,8 @@ build-backend = "uv_build"
 [dependency-groups]
 # Only `flexcast backtest` draws charts; the deployed image (ingest/train/plan/serve) skips it.
 report = ["matplotlib>=3.9"]
+# Model development notebooks (Stage 2c): paired .py/.ipynb via jupytext.
+notebooks = ["jupyterlab>=4.2", "jupytext>=1.16"]
 dev = [
     "mypy>=1.11",
     "pandas-stubs>=2.2",
@@ -38,14 +40,20 @@ dev = [
 ]
 
 [tool.uv]
-default-groups = ["dev", "report"]
+default-groups = ["dev", "report", "notebooks"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["*.ipynb"]  # notebooks are linted via their paired .py source
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "DTZ"]
+
+[tool.ruff.lint.per-file-ignores]
+# Notebooks: imports follow markdown cells, a bare expression at the end of a cell displays it,
+# and markdown tables/prose read better unwrapped.
+"notebooks/*.py" = ["E402", "B018", "E501"]
 
 [tool.mypy]
 python_version = "3.12"

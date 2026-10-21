@@ -10,6 +10,7 @@ from flexcast.ingest import Ingester
 from flexcast.prices import PriceSource, load_day_prices
 from flexcast.settlement import period_starts
 from flexcast.sources.elexon import ElexonClient
+from flexcast.sources.neso import NesoClient
 from flexcast.sources.octopus import OctopusClient
 from flexcast.storage import Storage
 
@@ -20,7 +21,13 @@ SPRING = date(2025, 3, 30)
 @pytest.fixture
 def storage(tmp_path: Path, upstream: respx.MockRouter) -> Storage:
     st = Storage(f"file://{tmp_path}")
-    ing = Ingester(st, ElexonClient(S.elexon_base_url), OctopusClient(S.octopus_base_url), "C")
+    ing = Ingester(
+        st,
+        ElexonClient(S.elexon_base_url),
+        OctopusClient(S.octopus_base_url),
+        "C",
+        neso=NesoClient(S.neso_base_url),
+    )
     ing.ingest_day(SPRING, ["system_prices", "agile"])
     return st
 

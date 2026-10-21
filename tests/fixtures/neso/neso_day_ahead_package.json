@@ -1,0 +1,100 @@
+{
+  "help": "https://api.neso.energy/api/3/action/help_show?name=package_show",
+  "success": true,
+  "result": {
+    "license_title": "NESO Open Data Licence",
+    "maintainer": "",
+    "relationships_as_object": [],
+    "private": false,
+    "maintainer_email": "",
+    "num_tags": 3,
+    "id": "8e3cc601-1fab-4325-82ca-d8a0daeddf73",
+    "metadata_created": "2026-09-14T12:11:47.567900",
+    "metadata_modified": "2026-10-20T11:30:16.053064",
+    "author": "",
+    "author_email": "",
+    "state": "active",
+    "version": "",
+    "creator_user_id": "1abec7e0-65fd-477f-aa48-e8b358e810af",
+    "type": "dataset",
+    "resources": [
+      {
+        "mimetype": "text/csv",
+        "cache_url": null,
+        "name": " N2EX GB Day-Ahead Price",
+        "hash": "",
+        "description": "This data file returns the Day-Ahead price data published by Nord Pool each day for GB.",
+        "metadata_modified": "2026-10-20T11:30:16.053064",
+        "cache_last_updated": null,
+        "url": "https://api.neso.energy/datastore/dump/4f27eea5-7038-4f73-9740-e3e4ad47c26a",
+        "datastore_active": true,
+        "format": "CSV",
+        "package_id": "8e3cc601-1fab-4325-82ca-d8a0daeddf73",
+        "created": "2026-09-14T12:12:12.872260",
+        "state": "active",
+        "mimetype_inner": null,
+        "last_modified": "2026-09-21T12:38:33.467657",
+        "position": 0,
+        "revision_id": "ef1f9089-8020-48d1-ac9e-2a1942d8b6f7",
+        "url_type": "datastore",
+        "id": "4f27eea5-7038-4f73-9740-e3e4ad47c26a",
+        "resource_type": null,
+        "size": null
+      }
+    ],
+    "num_resources": 1,
+    "tags": [
+      {
+        "vocabulary_id": null,
+        "state": "active",
+        "display_name": "Day-Ahead",
+        "id": "af2709e5-b348-46e6-b9dd-35f69bad6322",
+        "name": "Day-Ahead"
+      },
+      {
+        "vocabulary_id": null,
+        "state": "active",
+        "display_name": "Power Exchange",
+        "id": "a6e52a21-267f-4d50-81bf-d5e80aae373f",
+        "name": "Power Exchange"
+      },
+      {
+        "vocabulary_id": null,
+        "state": "active",
+        "display_name": "Subscribable",
+        "id": "fb80a4a5-bda6-4679-9c06-4decec4a0917",
+        "name": "Subscribable"
+      }
+    ],
+    "groups": [],
+    "license_id": "ESO",
+    "relationships_as_subject": [],
+    "organization": {
+      "description": "We trade power exchange, forward energy, and balancing contracts to meet forecast energy needs, in advance of the balancing mechanism.",
+      "created": "2019-10-31T16:54:44.487635",
+      "title": "Trading",
+      "name": "trade-data",
+      "is_organization": true,
+      "state": "active",
+      "image_url": "2024-09-30-082921.286460Trading.svg",
+      "revision_id": "d479bf8d-8b83-43ca-a8cf-3ff5c59bf12a",
+      "type": "organization",
+      "id": "16468228-f545-4fdc-b6d7-31013e5bf568",
+      "approval_status": "approved"
+    },
+    "name": "day-ahead-power-exchange-prices-nordpool",
+    "isopen": false,
+    "url": "",
+    "notes": "These day-ahead power exchange prices are wholesale electricity rates for delivery the following day and are provided here by Nord Pool. These are published in £/MWh and can vary due to supply and demand.\r\n\r\nNational Energy System Operator Limited (NESO) has prepared this data portal in line with its duty under the EU Transparency Regulation No 543/2013.  This data portal is intended to provide transparency for users by providing day-ahead index prices on a five-year rolling basis. \r\n\r\nWhile we have made reasonable inquiries to ensure the accuracy of the data, no warranty can be or is made as to the accuracy and completeness of the data. Users of the data portal should make their own enquiries to Nord Pool as to its accuracy and suitability for the purpose for which they use it. NESO shall not be under any liability for any error or misstatement on which a user of the data portal relies or seeks to rely (other than fraudulent misstatement or fraudulent misrepresentation) and does not accept any responsibility for any use which is made of the data or (to the extent permitted by law) for any damages or losses incurred.    \r\n\r\n© National Energy System Operator Ltd 2026, all rights reserved.\r\n",
+    "owner_org": "16468228-f545-4fdc-b6d7-31013e5bf568",
+    "extras": [
+      {
+        "key": "Update frequency",
+        "value": "Daily"
+      }
+    ],
+    "license_url": "https://www.neso.energy/data-portal/ngeso-open-licence",
+    "title": "Day-Ahead Power Exchange prices (Nord Pool)",
+    "revision_id": "ef1f9089-8020-48d1-ac9e-2a1942d8b6f7"
+  }
+}
