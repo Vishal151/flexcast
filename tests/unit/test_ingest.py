@@ -12,6 +12,7 @@ from flexcast.config import Settings
 from flexcast.ingest import DATASETS, Ingester, merge
 from flexcast.settlement import LONDON
 from flexcast.sources.elexon import ElexonClient
+from flexcast.sources.gas import GasClient
 from flexcast.sources.neso import NesoClient
 from flexcast.sources.octopus import OctopusClient
 from flexcast.storage import Storage
@@ -37,6 +38,7 @@ def ingester(storage: Storage) -> Ingester:
         OctopusClient(S.octopus_base_url),
         region="C",
         neso=NesoClient(S.neso_base_url),
+        gas=GasClient(S.gas_base_url),
     )
 
 
@@ -174,3 +176,24 @@ def test_day_ahead_partition_is_one_london_day(
     ingester.ingest_day(d, ["day_ahead"])
     df = storage.read_parquet(f"raw/day_ahead/date={d}/part.parquet")
     assert len(df) == hours and str(df["start_time"].dt.tz) == "UTC"
+
+
+def test_candidate_datasets_ingest_idempotently(
+    upstream: respx.MockRouter, ingester: Ingester, storage: Storage, tmp_path: Path
+) -> None:
+    pub_day, gas_day = date(2025, 6, 9), date(2025, 6, 5)
+
+    def ingest() -> None:
+        ingester.ingest_day(pub_day, ["availability"])
+        ingester.ingest_day(gas_day, ["gas_sap"])
+
+    ingest()
+    first = tree_hashes(tmp_path)
+    ingest()
+    assert tree_hashes(tmp_path) == first
+    av = storage.read_parquet(f"raw/availability/date={pub_day}/part.parquet")
+    assert av["publish_time"].dt.tz_convert(LONDON).dt.date.eq(pub_day).all()
+    assert av["publish_time"].nunique() == 24  # hourly vintages
+    gas = storage.read_parquet(f"raw/gas_sap/date={gas_day}/part.parquet")
+    assert gas["gas_day"].tolist() == [gas_day]
+    assert 1 < gas["price_p_per_kwh"].iloc[0] < 20

@@ -12,6 +12,7 @@ import pytest
 from flexcast.config import Settings
 from flexcast.settlement import LONDON, london_day_bounds, period_starts
 from flexcast.sources.elexon import ElexonClient
+from flexcast.sources.gas import GasClient
 from flexcast.sources.neso import NesoClient
 from flexcast.sources.octopus import OctopusClient
 
@@ -87,3 +88,16 @@ def test_neso_embedded_forecast_vintages() -> None:
         if r.publish_time == latest and r.settlement_date == tomorrow
     }
     assert len(covered) == len(period_starts(tomorrow))
+
+
+def test_availability_vintage_covers_two_days_ahead(elexon: ElexonClient) -> None:
+    p = elexon.availability(*london_day_bounds(DAY))
+    assert not p.rejects, p.rejects[:2]
+    assert len({r.publish_time for r in p.rows}) >= 20  # hourly vintages
+    assert min(r.forecast_date for r in p.rows) == DAY + timedelta(days=2)
+
+
+def test_gas_sap_published_for_recent_days() -> None:
+    p = GasClient(S.gas_base_url).sap(DAY - timedelta(days=7), DAY)
+    assert not p.rejects, p.rejects[:2]
+    assert [r.gas_day for r in p.rows] == [DAY - timedelta(days=k) for k in range(7, -1, -1)]

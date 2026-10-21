@@ -43,7 +43,11 @@ def test_every_manifest_entry_has_a_parseable_file() -> None:
     assert entries
     for e in entries:
         assert {"label", "source", "method", "path", "params", "file"} <= e.keys()
-        json.loads((FIXTURES / e["file"]).read_text())
+        text = (FIXTURES / e["file"]).read_text()
+        if "json" in e["content_type"]:
+            json.loads(text)
+        else:
+            assert text.startswith("Applicable At,")  # the gas portal's CSV header
 
 
 def test_labels_are_unique() -> None:

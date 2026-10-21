@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 from flexcast.settlement import LONDON, london_day_bounds
 from flexcast.sources.elexon import ElexonClient
+from flexcast.sources.gas import GasClient
 from flexcast.sources.http import Parsed
 from flexcast.sources.neso import NesoClient
 from flexcast.sources.octopus import OctopusClient
@@ -49,6 +50,8 @@ DATASETS = {
         Dataset("agile", ("valid_from", "product_code", "region"), "valid_from"),
         Dataset("embedded", ("publish_time", "start_time"), "publish_time"),
         Dataset("day_ahead", ("start_time",), "start_time"),
+        Dataset("availability", ("publish_time", "forecast_date", "fuel_type"), "publish_time"),
+        Dataset("gas_sap", ("gas_day",), "gas_day"),
     ]
 }
 
@@ -94,11 +97,13 @@ class Ingester:
         octopus: OctopusClient,
         region: str,
         neso: NesoClient,
+        gas: GasClient,
     ) -> None:
         self.storage = storage
         self.elexon = elexon
         self.octopus = octopus
         self.neso = neso
+        self.gas = gas
         self.region = region
         self._tariffs: dict[str, str] = {}
         self._fetchers: dict[str, Callable[[date], Records]] = {
@@ -110,6 +115,8 @@ class Ingester:
             "agile": self._agile,
             "embedded": self._embedded,
             "day_ahead": lambda d: _records(self.neso.day_ahead_prices(*london_day_bounds(d))),
+            "availability": lambda d: _records(self.elexon.availability(*london_day_bounds(d))),
+            "gas_sap": lambda d: _records(self.gas.sap(d, d)),
         }
 
     def _embedded(self, d: date) -> Records:
