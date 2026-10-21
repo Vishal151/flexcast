@@ -47,13 +47,16 @@ import style
 from flexcast.backtest import BacktestConfig, days_between, feature_table, run, summarise
 from flexcast.features import ALL_COLUMNS
 from flexcast.history import History
-from flexcast.models.lgbm import NUM_ROUNDS, LGBMQuantile
+from flexcast.models.lgbm import LGBMQuantile
 from flexcast.storage import Storage
 
 style.use()
 ROOT = Path.cwd().parent if Path.cwd().name == "notebooks" else Path.cwd()
 history = History.load(Storage(f"file://{ROOT / 'data'}"))
 VAL_START, VAL_END, TRAIN_START = date(2025, 4, 21), date(2025, 10, 19), date(2024, 10, 20)
+# The settings before this notebook (the code defaults now hold the tuned ones).
+PRE_TUNING = {"num_leaves": 31, "min_data_in_leaf": 50, "feature_fraction": 0.9, "lambda_l2": 0.0}
+PRE_TUNING_ROUNDS = 300
 
 table = feature_table(history, days_between(TRAIN_START, VAL_END), pd.Timestamp("09:00").time())
 print(f"feature table: {len(table[0]):,} rows × {table[0].shape[1]} columns")
@@ -72,7 +75,12 @@ cfg_fast = BacktestConfig(
     retrain_every_days=28,
     validation_days=0,
 )
-default = run(history, cfg_fast, {"default": LGBMQuantile}, table=table)
+default = run(
+    history,
+    cfg_fast,
+    {"default": lambda: LGBMQuantile(params=PRE_TUNING, num_rounds=PRE_TUNING_ROUNDS)},
+    table=table,
+)
 d = default.daily[default.daily.strategy == "default"]
 rng = np.random.default_rng(0)
 gbp = [rng.choice(d.value_gbp.to_numpy(), len(d)).mean() * 365 for _ in range(2000)]
@@ -102,7 +110,7 @@ space = {
     "lambda_l2": [0.0, 1.0, 10.0],
 }
 pick = np.random.default_rng(42)
-configs = {"default": {"num_rounds": NUM_ROUNDS}}
+configs = {"default": {**PRE_TUNING, "num_rounds": PRE_TUNING_ROUNDS}}
 while len(configs) < 13:
     c = {k: v[pick.integers(len(v))] for k, v in space.items()}
     configs[f"cfg{len(configs):02d}"] = c
@@ -152,7 +160,7 @@ cfg_weekly = BacktestConfig(
     test_start=VAL_START, test_end=VAL_END, train_start=TRAIN_START, validation_days=0
 )
 variants = {
-    "default settings": lambda: LGBMQuantile(),
+    "default settings": lambda: LGBMQuantile(params=PRE_TUNING, num_rounds=PRE_TUNING_ROUNDS),
     "tuned · p50 median": lambda: LGBMQuantile(
         params=best_params, num_rounds=int(best["num_rounds"])
     ),
