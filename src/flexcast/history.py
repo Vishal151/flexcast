@@ -5,8 +5,8 @@ Feature code may only read through `as_of(name, decision_time)`, which keeps row
 available_at < decision_time. Availability rules (docs/data-sources.md, SPEC §2):
 
 - ndf, windfor: publish_time.
-- day_ahead (N2EX auction prices): 12:00 London on D-1 for London day D. The auction publishes by
-  10:00 D-1; the extra 2 h covers NESO's republication (see docs/data-sources.md).
+- day_ahead (N2EX auction prices): 13:00 London on D-1 for London day D. The auction publishes by
+  10:00 D-1; NESO republishes ~12:30 (measured), plus a half-hour margin (docs/data-sources.md).
 - embedded (NESO solar/wind): publish_time + EMBEDDED_LAG. A vintage reaches the archive some
   25-85 min after its timestamp, and the timestamp's timezone is unconfirmed; 2 h covers both.
 - prices (system sell price), mid (APXMIDP): period start + PRICE_LAG. Real-time publication is
@@ -59,8 +59,8 @@ def _empty(schema: dict[str, str]) -> pd.DataFrame:
 
 
 def _day_ahead_half_hourly(hourly: pd.DataFrame) -> pd.DataFrame:
-    """Each hourly auction price applies to both half-hours of its hour; available from 12:00
-    London on the day before its London date."""
+    """Each hourly auction price applies to both half-hours of its hour; available from
+    DAY_AHEAD_AVAILABLE London on the day before its London date."""
     h = hourly[["start_time", "price"]]
     halves = pd.concat([h, h.assign(start_time=h["start_time"] + pd.Timedelta(minutes=30))])
     halves = _with_london_keys(halves.sort_values("start_time").reset_index(drop=True))
