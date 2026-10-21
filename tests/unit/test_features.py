@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
@@ -45,6 +46,8 @@ def poison_future(h: History, decision_time: datetime) -> History:
         windfor=bad(h.windfor, "generation"),
         embedded=embedded,
         day_ahead=bad(h.day_ahead, "price"),
+        availability=bad(h.availability, "output_usable"),
+        gas=bad(h.gas, "price"),
     )
 
 
@@ -69,7 +72,16 @@ def test_leakage_every_source_used_was_available_before_decision(
     h = history_for(synthetic_history, target)
     dt = decision_time_for(target)
     f = build(h, dt, target)
-    assert set(f.provenance) == {"prices", "mid", "ndf", "windfor", "embedded", "day_ahead"}
+    assert set(f.provenance) == {
+        "prices",
+        "mid",
+        "ndf",
+        "windfor",
+        "embedded",
+        "day_ahead",
+        "availability",
+        "gas",
+    }
     for source, t in f.provenance.items():
         assert t < dt, f"{source} used data available at {t}, decision {dt}"
 
@@ -236,14 +248,7 @@ def test_solar_uses_latest_vintage_at_least_two_hours_old(
 
 def test_history_without_embedded_data_gives_nan_solar(synthetic_history: HistoryFactory) -> None:
     h = history_for(synthetic_history, NORMAL)
-    h2 = History(
-        prices=h.prices,
-        mid=h.mid,
-        ndf=h.ndf,
-        windfor=h.windfor,
-        embedded=h.embedded.iloc[:0],
-        day_ahead=h.day_ahead,
-    )
+    h2 = replace(h, embedded=h.embedded.iloc[:0])
     f = build(h2, decision_time_for(NORMAL), NORMAL)
     assert f.X["solar"].isna().all() and "embedded" not in f.provenance
 
@@ -258,12 +263,12 @@ def test_day_ahead_lags_use_yesterday_not_the_target_day(synthetic_history: Hist
     assert (f["da_d1_max"] >= f["da_d1"]).all() and (f["da_d1_min"] <= f["da_d1"]).all()
 
 
-def test_day_ahead_availability_rule_is_noon_on_the_day_before(
+def test_day_ahead_availability_rule_is_13_00_on_the_day_before(
     synthetic_history: HistoryFactory,
 ) -> None:
     h = history_for(synthetic_history, NORMAL)
     row = h.day_ahead[h.day_ahead["start_time"] == pd.Timestamp("2025-06-11T12:30Z")].iloc[0]
-    assert row["available_at"] == pd.Timestamp("2025-06-10T11:00Z")  # 12:00 BST on D-1
+    assert row["available_at"] == pd.Timestamp("2025-06-10T12:00Z")  # 13:00 BST on D-1
     assert row["price"] == encode_price(pd.Timestamp("2025-06-11T12:00Z")) + 500  # hour's price
 
 
@@ -272,3 +277,60 @@ def test_actual_day_ahead_prices_are_half_hourly(synthetic_history: HistoryFacto
     actual = h.actual_prices(AUTUMN, "day_ahead")
     assert list(actual.index) == period_starts(AUTUMN)  # 50 half-hours
     assert (actual.to_numpy()[0::2] == actual.to_numpy()[1::2]).all()
+
+
+# --- candidate inputs: gas and plant availability ---------------------------------------------
+
+
+def test_gas_availability_rule_is_13_00_the_day_after_the_gas_day(
+    synthetic_history: HistoryFactory,
+) -> None:
+    h = history_for(synthetic_history, NORMAL)
+    row = h.gas[h.gas["gas_day"] == date(2025, 6, 8)].iloc[0]
+    assert row["available_at"] == pd.Timestamp("2025-06-09T12:00Z")  # 13:00 BST on day + 1
+    assert row["price"] == pytest.approx(date(2025, 6, 8).toordinal() % 97)  # p/kWh -> £/MWh
+
+
+def test_gas_at_d1_09_00_is_the_gas_day_three_days_before(
+    synthetic_history: HistoryFactory,
+) -> None:
+    """D-2's price appears at 13:00 on D-1, after the 09:00 decision, so the latest is D-3."""
+    f = build(history_for(synthetic_history, NORMAL), decision_time_for(NORMAL), NORMAL).X
+    expected = [(NORMAL - timedelta(days=k)).toordinal() % 97 for k in range(3, 10)]
+    np.testing.assert_allclose(f["gas_price"], expected[0])
+    np.testing.assert_allclose(f["gas_price_7d"], np.mean(expected))
+
+
+def test_availability_uses_latest_vintage_covering_the_target_day(
+    synthetic_history: HistoryFactory,
+) -> None:
+    """Vintages cover publish date + 2 days onward, so for D the last one is published at 23:00
+    BST on D-2 (22:00Z): the 09:00 D-1 vintage only starts at D+1."""
+    h = history_for(synthetic_history, NORMAL)
+    f = build(h, decision_time_for(NORMAL), NORMAL).X
+    assert (f["avail_ccgt"] == encode_publish(pd.Timestamp("2025-06-09T22:00Z"))).all()
+    assert (f["avail_nuclear"] == 4_000).all() and (f["avail_interconnector"] == 2_000).all()
+    assert (f["avail_dispatchable"] == f["avail_ccgt"] + 4_000).all()  # excludes wind
+    expected = f["avail_dispatchable"] + 2_000 + f["wind"] - f["ndf"]
+    pd.testing.assert_series_equal(f["margin"], expected, check_names=False)
+    assert (h.availability["available_at"] == h.availability["publish_time"]).all()
+
+
+def test_history_without_candidate_data_gives_nan(synthetic_history: HistoryFactory) -> None:
+    h = history_for(synthetic_history, NORMAL)
+    h2 = replace(h, availability=h.availability.iloc[:0], gas=h.gas.iloc[:0])
+    f = build(h2, decision_time_for(NORMAL), NORMAL)
+    cols = ["gas_price", "gas_price_7d", "avail_ccgt", "avail_dispatchable", "margin"]
+    assert f.X[cols].isna().all().all()
+    assert "gas" not in f.provenance and "availability" not in f.provenance
+
+
+def test_availability_ignores_vintages_published_after_an_earlier_decision(
+    synthetic_history: HistoryFactory,
+) -> None:
+    """At D-1 09:00 every vintage covering D is already past (they stop at D-2), so this uses an
+    earlier decision to show the availability filter is applied, not just luckily unneeded."""
+    h = history_for(synthetic_history, NORMAL)
+    dt = datetime(2025, 6, 9, 12, tzinfo=LONDON)  # D-2 12:00 BST = 11:00Z
+    f = build(h, dt, NORMAL).X
+    assert (f["avail_ccgt"] == encode_publish(pd.Timestamp("2025-06-09T10:00Z"))).all()

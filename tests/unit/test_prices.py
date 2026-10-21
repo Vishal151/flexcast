@@ -10,6 +10,7 @@ from flexcast.ingest import Ingester
 from flexcast.prices import PriceSource, load_day_prices
 from flexcast.settlement import period_starts
 from flexcast.sources.elexon import ElexonClient
+from flexcast.sources.gas import GasClient
 from flexcast.sources.neso import NesoClient
 from flexcast.sources.octopus import OctopusClient
 from flexcast.storage import Storage
@@ -27,6 +28,7 @@ def storage(tmp_path: Path, upstream: respx.MockRouter) -> Storage:
         OctopusClient(S.octopus_base_url),
         "C",
         neso=NesoClient(S.neso_base_url),
+        gas=GasClient(S.gas_base_url),
     )
     ing.ingest_day(SPRING, ["system_prices", "agile"])
     return st

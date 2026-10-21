@@ -5,10 +5,13 @@ Feature code may only read through `as_of(name, decision_time)`, which keeps row
 available_at < decision_time. Availability rules (docs/data-sources.md, SPEC §2):
 
 - ndf, windfor: publish_time.
-- day_ahead (N2EX auction prices): 12:00 London on D-1 for London day D. The auction publishes by
-  10:00 D-1; the extra 2 h covers NESO's republication (see docs/data-sources.md).
+- day_ahead (N2EX auction prices): 13:00 London on D-1 for London day D. The auction publishes by
+  10:00 D-1; NESO republishes ~12:30 (measured), plus a half-hour margin (docs/data-sources.md).
 - embedded (NESO solar/wind): publish_time + EMBEDDED_LAG. A vintage reaches the archive some
   25-85 min after its timestamp, and the timestamp's timezone is unconfirmed; 2 h covers both.
+- availability (Elexon FOU2T14D, output usable by fuel): publish_time.
+- gas (System Average Price): GAS_AVAILABLE London on the day after the gas day. The portal
+  republishes at ~11:40 UTC (12:40 BST) and gas day d first appears on d+1 (measured).
 - prices (system sell price), mid (APXMIDP): period start + PRICE_LAG. Real-time publication is
   ~48 min after period start; the stored value is the latest revision, which we accept as a
   known limitation (revisions are usually small; ingest now keeps every revision it sees).
@@ -25,10 +28,11 @@ from flexcast.storage import Storage
 
 PRICE_LAG = timedelta(hours=1)
 EMBEDDED_LAG = timedelta(hours=2)
-DAY_AHEAD_AVAILABLE = time(12)  # London wall-clock time on D-1
+DAY_AHEAD_AVAILABLE = time(13)  # London wall-clock on D-1; NESO republishes ~12:30 (observed)
+GAS_AVAILABLE = time(13)  # London wall-clock on gas day + 1
 MID_PROVIDER = "APXMIDP"  # N2EX has gaps and zero-volume periods
 
-Name = Literal["prices", "mid", "ndf", "windfor", "embedded", "day_ahead"]
+Name = Literal["prices", "mid", "ndf", "windfor", "embedded", "day_ahead", "availability", "gas"]
 Market = Literal["imbalance", "day_ahead"]
 
 
@@ -51,6 +55,14 @@ EMPTY_SCHEMAS: dict[str, dict[str, str]] = {
         "solar_capacity_mw": "float64",
         "wind_mw": "float64",
     },
+    "availability": {
+        "publish_time": UTC_TIME,
+        "forecast_date": "object",  # London date
+        "fuel_type": "object",
+        "output_usable": "int64",
+        "interconnector": "bool",
+    },
+    "gas_sap": {"gas_day": "object", "price_p_per_kwh": "float64"},
 }
 
 
@@ -59,8 +71,8 @@ def _empty(schema: dict[str, str]) -> pd.DataFrame:
 
 
 def _day_ahead_half_hourly(hourly: pd.DataFrame) -> pd.DataFrame:
-    """Each hourly auction price applies to both half-hours of its hour; available from 12:00
-    London on the day before its London date."""
+    """Each hourly auction price applies to both half-hours of its hour; available from
+    DAY_AHEAD_AVAILABLE London on the day before its London date."""
     h = hourly[["start_time", "price"]]
     halves = pd.concat([h, h.assign(start_time=h["start_time"] + pd.Timedelta(minutes=30))])
     halves = _with_london_keys(halves.sort_values("start_time").reset_index(drop=True))
@@ -69,6 +81,21 @@ def _day_ahead_half_hourly(hourly: pd.DataFrame) -> pd.DataFrame:
         for d in halves["london_date"]
     ]
     return halves.assign(available_at=pd.to_datetime(published, utc=True))
+
+
+def _gas(raw: pd.DataFrame) -> pd.DataFrame:
+    """SAP in £/MWh (1 p/kWh = £10/MWh), available GAS_AVAILABLE on the day after its gas day."""
+    g = raw.sort_values("gas_day").reset_index(drop=True)
+    published = [
+        datetime.combine(d + timedelta(days=1), GAS_AVAILABLE, LONDON) for d in g["gas_day"]
+    ]
+    return pd.DataFrame(
+        {
+            "gas_day": g["gas_day"],
+            "price": g["price_p_per_kwh"] * 10,
+            "available_at": pd.to_datetime(published, utc=True),
+        }
+    )
 
 
 def _with_london_keys(df: pd.DataFrame) -> pd.DataFrame:
@@ -85,6 +112,8 @@ class History:
     windfor: pd.DataFrame  # publish_time, start_time (hourly), generation, available_at
     embedded: pd.DataFrame  # publish_time, start_time, solar_mw, solar_capacity_mw, wind_mw, ...
     day_ahead: pd.DataFrame  # start_time (half-hourly), price, available_at, london_date, hhmm
+    availability: pd.DataFrame  # publish_time, forecast_date, fuel_type, output_usable, ...
+    gas: pd.DataFrame  # gas_day, price (£/MWh), available_at
     _by_day: dict[str, dict[date, pd.DataFrame]] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -95,6 +124,9 @@ class History:
             df: pd.DataFrame = getattr(self, name)
             local_date = df["start_time"].dt.tz_convert(LONDON).dt.date
             by_day[name] = {d: g for d, g in df.groupby(local_date, sort=False)}
+        by_day["availability"] = {
+            d: g for d, g in self.availability.groupby("forecast_date", sort=False)
+        }
         object.__setattr__(self, "_by_day", by_day)
 
     @classmethod
@@ -106,6 +138,8 @@ class History:
         windfor: pd.DataFrame,
         embedded: pd.DataFrame | None = None,
         day_ahead: pd.DataFrame | None = None,
+        availability: pd.DataFrame | None = None,
+        gas_sap: pd.DataFrame | None = None,
     ) -> "History":
         """Build from raw-schema frames (as stored by ingest)."""
         p = prices.sort_values("created_date_time").drop_duplicates("start_time", keep="last")
@@ -122,6 +156,9 @@ class History:
         da = _day_ahead_half_hourly(
             _empty(EMPTY_SCHEMAS["day_ahead"]) if day_ahead is None else day_ahead
         )
+        av = _empty(EMPTY_SCHEMAS["availability"]) if availability is None else availability
+        av = av[list(EMPTY_SCHEMAS["availability"])]
+        gas = _gas(_empty(EMPTY_SCHEMAS["gas_sap"]) if gas_sap is None else gas_sap)
         return cls(
             prices=p.sort_values("start_time").reset_index(drop=True),
             mid=m.sort_values("start_time").reset_index(drop=True),
@@ -129,6 +166,8 @@ class History:
             windfor=w.assign(available_at=w["publish_time"]).reset_index(drop=True),
             embedded=e.assign(available_at=e["publish_time"] + EMBEDDED_LAG).reset_index(drop=True),
             day_ahead=da,
+            availability=av.assign(available_at=av["publish_time"]).reset_index(drop=True),
+            gas=gas,
         )
 
     @classmethod
@@ -144,13 +183,16 @@ class History:
             read("windfor"),
             read("embedded"),
             read("day_ahead"),
+            read("availability"),
+            read("gas_sap"),
         )
 
     def as_of(
         self, name: Name, decision_time: datetime, target_date: date | None = None
     ) -> pd.DataFrame:
-        """Rows knowable strictly before decision_time. For the vintage tables (ndf, embedded),
-        target_date narrows to that day's periods first (a speed-up; same availability filter)."""
+        """Rows knowable strictly before decision_time. For the vintage tables (ndf, embedded,
+        availability), target_date narrows to that day's rows first (a speed-up; same
+        availability filter)."""
         if decision_time.tzinfo is None:
             raise ValueError("decision_time must be tz-aware")
         if name in self._by_day and target_date is not None:

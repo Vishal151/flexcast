@@ -11,6 +11,7 @@ BASE_URLS = {
     "elexon": "https://data.elexon.co.uk/bmrs/api/v1",
     "octopus": "https://api.octopus.energy/v1",
     "neso": "https://api.neso.energy/api/3/action",
+    "gas": "https://data.nationalgas.com/api",
 }
 
 DAYS = {
@@ -93,7 +94,36 @@ def requests() -> list[Request]:
         ),
         Request("octopus_agile_product", "octopus", f"/products/{AGILE_PRODUCT}/"),
     ]
-    return reqs + neso_requests()
+    return reqs + neso_requests() + candidate_requests()
+
+
+def candidate_requests() -> list[Request]:
+    """Gas SAP and plant availability (docs/candidate-sources.md): the windows a feature build
+    for the normal day needs (availability vintages published on D-2; gas days D-9..D-3)."""
+    from flexcast.sources.gas import sap_params
+
+    d = DAYS["normal"]
+    p_start, p_end = london_day_utc(d - timedelta(days=2))
+    return [
+        Request(
+            "availability_normal_pub_d-2",
+            "elexon",
+            "/datasets/FOU2T14D",
+            {"publishDateTimeFrom": iso(p_start), "publishDateTimeTo": iso(p_end)},
+        ),
+        Request(
+            "gas_sap_normal",
+            "gas",
+            "/find-gas-data-download",
+            sap_params(d - timedelta(days=9), d - timedelta(days=3)),
+        ),
+        Request(  # what ingest asks for: one gas day per partition
+            "gas_sap_one_day",
+            "gas",
+            "/find-gas-data-download",
+            sap_params(d - timedelta(days=6), d - timedelta(days=6)),
+        ),
+    ]
 
 
 def neso_requests() -> list[Request]:

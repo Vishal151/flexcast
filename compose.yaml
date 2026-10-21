@@ -13,6 +13,7 @@ x-app: &app
     FLEXCAST_ELEXON_BASE_URL: http://upstream-mock:8080/elexon
     FLEXCAST_OCTOPUS_BASE_URL: http://upstream-mock:8080/octopus
     FLEXCAST_NESO_BASE_URL: http://upstream-mock:8080/neso
+    FLEXCAST_GAS_BASE_URL: http://upstream-mock:8080/gas
     STORAGE_EMULATOR_HOST: http://gcs:4443
     FSSPEC_GCS_TOKEN: anon  # emulator only: no credentials (real GCP uses ADC / service account)
   depends_on:

@@ -42,6 +42,13 @@ def ingest_fixtures() -> None:
             "ndf,windfor,embedded",
         )
     )
+    # Candidate inputs: the one availability publish day and gas day the fixtures hold.
+    ok(
+        run_job(
+            "ingest", "--start", "2025-06-09", "--end", "2025-06-09", "--datasets", "availability"
+        )
+    )
+    ok(run_job("ingest", "--start", "2025-06-05", "--end", "2025-06-05", "--datasets", "gas_sap"))
 
 
 @pytest.fixture(scope="module")

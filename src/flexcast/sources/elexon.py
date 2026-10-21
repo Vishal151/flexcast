@@ -68,6 +68,17 @@ class Fuelhh(SettlementRow):
     generation: int
 
 
+class Availability(Row):
+    """FOU2T14D: output usable (MW) by fuel type for London day forecast_date, 2-14 days ahead.
+    Interconnectors appear as fuel types (INTFR, INTNED, ...) with interconnector=True."""
+
+    publish_time: AwareDatetime
+    forecast_date: date
+    fuel_type: str
+    output_usable: int
+    interconnector: bool
+
+
 class ElexonClient:
     def __init__(self, base_url: str, client: httpx.Client | None = None) -> None:
         self.base_url = base_url.rstrip("/")
@@ -115,3 +126,6 @@ class ElexonClient:
 
     def windfor(self, publish_from: datetime, publish_to: datetime) -> Parsed[Windfor]:
         return self._by_publish_time("/datasets/WINDFOR", Windfor, publish_from, publish_to)
+
+    def availability(self, publish_from: datetime, publish_to: datetime) -> Parsed[Availability]:
+        return self._by_publish_time("/datasets/FOU2T14D", Availability, publish_from, publish_to)

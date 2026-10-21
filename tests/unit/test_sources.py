@@ -5,8 +5,9 @@ import pytest
 import respx
 
 from flexcast.config import Settings
-from flexcast.settlement import london_day_bounds
+from flexcast.settlement import LONDON, london_day_bounds
 from flexcast.sources.elexon import ElexonClient
+from flexcast.sources.gas import GasClient
 from flexcast.sources.http import UpstreamError, get_json, iso_minute, windows
 from flexcast.sources.neso import NesoClient
 from flexcast.sources.octopus import OctopusClient
@@ -238,3 +239,43 @@ def test_day_ahead_rejects_malformed_periods() -> None:
         {"Date": "2025-06-11", "Delivery Period": "23:00 - 00:00", "Price": 9}
     )
     assert ok["start_time"] == datetime(2025, 6, 11, 23, tzinfo=UTC)
+
+
+# --- candidate inputs: plant availability and gas ---------------------------------------------
+
+
+def test_availability_vintages_cover_two_to_fourteen_days_ahead(upstream: respx.MockRouter) -> None:
+    start, end = london_day_bounds(NORMAL - timedelta(days=2))
+    p = ElexonClient(S.elexon_base_url).availability(start, end)
+    assert p.rows and not p.rejects
+    for r in p.rows:
+        ahead = (r.forecast_date - r.publish_time.astimezone(LONDON).date()).days
+        assert 2 <= ahead <= 14, r
+    fuels = {r.fuel_type for r in p.rows if not r.interconnector}
+    assert {"CCGT", "NUCLEAR", "WIND"} <= fuels
+    assert {r.fuel_type for r in p.rows if r.interconnector} >= {"INTFR", "INTNSL"}
+
+
+def test_gas_sap_parses_uk_dates_and_p_per_kwh(upstream: respx.MockRouter) -> None:
+    first, last = NORMAL - timedelta(days=9), NORMAL - timedelta(days=3)
+    p = GasClient(S.gas_base_url).sap(first, last)
+    assert not p.rejects
+    assert [r.gas_day for r in p.rows] == [first + timedelta(days=k) for k in range(7)]
+    assert all(1 < r.price_p_per_kwh < 20 for r in p.rows)
+
+
+@respx.mock
+def test_gas_sap_rejects_other_data_items_and_handles_empty_body() -> None:
+    url = f"{S.gas_base_url}/find-gas-data-download"
+    header = "Applicable At,Applicable For,Data Item,Value,Generated Time,Quality Indicator\n"
+    respx.get(url).mock(
+        side_effect=[
+            httpx.Response(200, text=header + '1/1/2025 12:40,01/01/2025,"SAP, 7 Day",3,x,L\n'),
+            httpx.Response(200, text=""),
+        ]
+    )
+    client = GasClient(S.gas_base_url)
+    p = client.sap(date(2025, 1, 1), date(2025, 1, 1))
+    assert not p.rows and p.rejects[0]["error"] == "unexpected data item"
+    empty = client.sap(date(2025, 1, 1), date(2025, 1, 1))
+    assert not empty.rows and not empty.rejects
