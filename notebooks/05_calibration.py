@@ -161,3 +161,19 @@ print(
         [chosen, "model"], ["coverage_80", "below_p10", "above_p90", "pinball", "gbp_per_year"]
     ].round(3)
 )
+
+# %% [markdown]
+# ### Reading the result
+#
+# - **Adopted: 90-day window, one offset for the whole day, band only** (now the code default).
+#   Validation coverage 72% → 82%, misses balanced (9% below p10, 9% above p90, vs 12% and 16%),
+#   pinball 8.12 → 8.08. £ is unchanged by construction: the schedule is planned on p50.
+# - **The simplest version won.** Per-4-hour-block offsets and shifting p50 didn't improve pinball,
+#   and the block versions that moved p50 cost £: separate shifts per block distort the daily shape
+#   the battery trades on.
+# - **Why fit it on past forecasts, not the test year:** calibration *is* a fitted model of the
+#   forecast's errors. Fitting it on the days you then score would make coverage look perfect by
+#   construction, which is the same leakage as training on the test set.
+# - **What it buys:** an honest p10/p90 is what a risk-aware schedule (Stage 2b) or a trader needs
+#   to size risk. With the band now trustworthy, the backtest re-chooses the risk-aware α on top of
+#   the calibrated forecast.

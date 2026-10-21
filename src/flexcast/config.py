@@ -19,9 +19,10 @@ class Settings(BaseSettings):
     git_sha: str = "unknown"  # recorded in model metadata; set by make / CI
     decision_at: time = time(9)  # D-1 wall-clock time, Europe/London
     risk_alpha: float = 0.0  # chosen by the backtest's validation window (docs/results.md)
-    # Rolling conformal calibration of the quantiles (notebook 05); 0 days = off.
-    calibration_window_days: int = 0
+    # Rolling conformal calibration of the quantiles, chosen in notebook 05: 90 days, one offset
+    # for the whole day, band only (p50 and so the schedule unchanged). 0 days = off.
+    calibration_window_days: int = 90
     calibration_hours_per_block: int | None = None
-    calibration_adjust: str = "p10,p50,p90"
+    calibration_adjust: str = "p10,p90"
     # Cloud Run injects PORT (unprefixed); FLEXCAST_PORT also works.
     port: int = Field(default=8080, validation_alias=AliasChoices("PORT", "FLEXCAST_PORT"))
