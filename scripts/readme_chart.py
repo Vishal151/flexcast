@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "notebooks"))
-import style  # noqa: E402
+import style  # type: ignore[import-not-found]  # noqa: E402
 
 from flexcast.backtest import summarise  # noqa: E402
 from flexcast.storage import Storage  # noqa: E402
