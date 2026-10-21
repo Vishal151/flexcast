@@ -263,7 +263,7 @@ def test_day_ahead_availability_rule_is_noon_on_the_day_before(
 ) -> None:
     h = history_for(synthetic_history, NORMAL)
     row = h.day_ahead[h.day_ahead["start_time"] == pd.Timestamp("2025-06-11T12:30Z")].iloc[0]
-    assert row["available_at"] == pd.Timestamp("2025-06-10T11:00Z")  # 12:00 BST on D-1
+    assert row["available_at"] == pd.Timestamp("2025-06-10T12:00Z")  # 13:00 BST on D-1
     assert row["price"] == encode_price(pd.Timestamp("2025-06-11T12:00Z")) + 500  # hour's price
 
 

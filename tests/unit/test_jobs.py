@@ -31,14 +31,14 @@ def trained(history: History, storage: Storage) -> str:
     return train(
         history,
         storage,
-        as_of=datetime(2025, 6, 24, 12, tzinfo=UTC),
+        as_of=datetime(2025, 6, 24, 13, tzinfo=UTC),
         git_sha="abc123",
         market="day_ahead",
     )
 
 
 def test_train_saves_model_with_metadata_and_latest_pointer(trained: str, storage: Storage) -> None:
-    # Day-ahead: at 12:00Z on 24 June, the auction prices for 25 June were published that morning.
+    # Day-ahead: at 13:00Z (14:00 BST) on 24 June, the prices for 25 June are already published.
     assert trained == "models/day_ahead/lgbm_quantile/train_end=2025-06-25"
     assert storage.read_text(latest_path("day_ahead")).strip() == trained
     meta = json.loads(storage.read_text(f"{trained}/metadata.json"))

@@ -168,7 +168,9 @@ exceptions via their early runs). The decision time, more than the model, limits
   prices were already present on 2026-10-20 evening. Same API and licence as above.
 - **No publish timestamp.** Auction timing per Nord Pool: gate closure **09:50 UK time on D-1**, results
   **by 10:00**, usually within minutes; a second auction can delay results if price thresholds are hit.
-  NESO's republication time: being measured (see journal).
+  NESO's republication time, measured on 2026-10-21 by polling every 5 min: tomorrow's prices appeared
+  between **11:28 and 11:33 UTC (≈12:30 UK)**. `DAY_AHEAD_AVAILABLE` is 13:00 London (half-hour margin).
+  Irrelevant to the 09:00 decision, which only sees prices published on D-2.
 - **`Date` + `Delivery Period` are UTC, not London time** (verified 2026-10-21). Every day has exactly
   24 rows, including both clock-change days (London days have 23/25 hours), and on summer days the
   series lines up with Octopus Agile (which is derived from day-ahead prices, with exact UTC times) far

@@ -25,7 +25,7 @@ from flexcast.storage import Storage
 
 PRICE_LAG = timedelta(hours=1)
 EMBEDDED_LAG = timedelta(hours=2)
-DAY_AHEAD_AVAILABLE = time(12)  # London wall-clock time on D-1
+DAY_AHEAD_AVAILABLE = time(13)  # London wall-clock on D-1; NESO republishes ~12:30 (observed)
 MID_PROVIDER = "APXMIDP"  # N2EX has gaps and zero-volume periods
 
 Name = Literal["prices", "mid", "ndf", "windfor", "embedded", "day_ahead"]
