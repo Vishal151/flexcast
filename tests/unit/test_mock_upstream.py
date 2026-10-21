@@ -23,7 +23,7 @@ def test_serves_every_manifest_entry_byte_for_byte(
     r = client.get(f"/{entry['source']}{entry['path']}", params=entry["params"])
     assert r.status_code == 200
     assert r.content == (FIXTURES / entry["file"]).read_bytes()
-    assert r.headers["content-type"].startswith("application/json")
+    assert r.headers["content-type"] == entry["content_type"]
 
 
 def test_unknown_params_are_404_not_a_near_match(client: TestClient) -> None:

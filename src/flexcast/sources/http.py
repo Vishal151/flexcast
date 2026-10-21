@@ -34,6 +34,23 @@ def get_json(
     Retries on network errors and 429/5xx (honouring Retry-After); other 4xx fail immediately
     because retrying a bad request can't succeed.
     """
+    return get(client, url, params, attempts=attempts, backoff_s=backoff_s, sleep=sleep).json()
+
+
+def get_text(client: httpx.Client, url: str, params: dict[str, str] | None = None) -> str:
+    """GET a text body (e.g. CSV), with the same retries as get_json."""
+    return get(client, url, params).text
+
+
+def get(
+    client: httpx.Client,
+    url: str,
+    params: dict[str, str] | None = None,
+    *,
+    attempts: int = 5,
+    backoff_s: float = 0.5,
+    sleep: Callable[[float], None] = time.sleep,
+) -> httpx.Response:
     for attempt in range(1, attempts + 1):
         retry_after: float | None = None
         try:
@@ -43,7 +60,7 @@ def get_json(
         else:
             if resp.status_code not in RETRY_STATUS:
                 resp.raise_for_status()
-                return resp.json()
+                return resp
             reason = f"HTTP {resp.status_code}"
             header = resp.headers.get("Retry-After", "")
             retry_after = float(header) if header.isdigit() else None

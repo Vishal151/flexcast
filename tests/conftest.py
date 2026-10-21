@@ -21,7 +21,7 @@ def upstream() -> Iterator[respx.MockRouter]:
             body = (FIXTURES / e["file"]).read_bytes()
             router.route(method=e["method"], url=url, params__eq=e["params"]).mock(
                 return_value=httpx.Response(
-                    200, content=body, headers={"content-type": "application/json"}
+                    200, content=body, headers={"content-type": e["content_type"]}
                 )
             )
         yield router

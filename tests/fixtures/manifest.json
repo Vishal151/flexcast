@@ -1,9 +1,10 @@
 {
-  "recorded_at": "2026-10-21T09:42:58+00:00",
+  "recorded_at": "2026-10-21T14:44:43+00:00",
   "base_urls": {
     "elexon": "https://data.elexon.co.uk/bmrs/api/v1",
     "octopus": "https://api.octopus.energy/v1",
-    "neso": "https://api.neso.energy/api/3/action"
+    "neso": "https://api.neso.energy/api/3/action",
+    "gas": "https://data.nationalgas.com/api"
   },
   "entries": [
     {
@@ -426,6 +427,52 @@
       },
       "file": "neso/neso_day_ahead_autumn_dst.json",
       "content_type": "application/json;charset=utf-8"
+    },
+    {
+      "label": "availability_normal_pub_d-2",
+      "source": "elexon",
+      "method": "GET",
+      "path": "/datasets/FOU2T14D",
+      "params": {
+        "publishDateTimeFrom": "2025-06-08T23:00Z",
+        "publishDateTimeTo": "2025-06-09T23:00Z"
+      },
+      "file": "elexon/availability_normal_pub_d-2.json",
+      "content_type": "application/json; charset=utf-8"
+    },
+    {
+      "label": "gas_sap_normal",
+      "source": "gas",
+      "method": "GET",
+      "path": "/find-gas-data-download",
+      "params": {
+        "applicableFor": "Y",
+        "dateFrom": "2025-06-02",
+        "dateTo": "2025-06-08",
+        "dateType": "GASDAY",
+        "latestFlag": "Y",
+        "ids": "PUBOB603",
+        "type": "CSV"
+      },
+      "file": "gas/gas_sap_normal.csv",
+      "content_type": "text/csv; charset=utf-8"
+    },
+    {
+      "label": "gas_sap_one_day",
+      "source": "gas",
+      "method": "GET",
+      "path": "/find-gas-data-download",
+      "params": {
+        "applicableFor": "Y",
+        "dateFrom": "2025-06-05",
+        "dateTo": "2025-06-05",
+        "dateType": "GASDAY",
+        "latestFlag": "Y",
+        "ids": "PUBOB603",
+        "type": "CSV"
+      },
+      "file": "gas/gas_sap_one_day.csv",
+      "content_type": "text/csv; charset=utf-8"
     }
   ]
 }

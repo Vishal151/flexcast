@@ -4,10 +4,14 @@ Bodies are saved as indented JSON (same content and key order as the API) so the
 and re-recordings diff cleanly. respx (unit) and mock_upstream (integration) both replay these
 files. The manifest maps (source, method, path, params) -> file.
 
-    uv run python scripts/record_fixtures.py
+    uv run python scripts/record_fixtures.py               # everything
+    uv run python scripts/record_fixtures.py gas_ avail    # only labels with these prefixes,
+                                                           # merged into the existing manifest
+Non-JSON bodies (the gas portal's CSV) are saved as-is, with their content type in the manifest.
 """
 
 import json
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -21,16 +25,18 @@ def pretty(raw: bytes) -> str:
     return json.dumps(json.loads(raw), indent=2, ensure_ascii=False) + "\n"
 
 
-def main() -> None:
+def main(prefixes: list[str]) -> None:
+    wanted = [r for r in requests() if not prefixes or r.label.startswith(tuple(prefixes))]
     entries = []
     with httpx.Client(timeout=60, follow_redirects=True) as client:
-        for req in requests():
+        for req in wanted:
             resp = client.get(BASE_URLS[req.source] + req.path, params=req.params)
             resp.raise_for_status()
-            file = f"{req.source}/{req.label}.json"
+            is_json = "json" in resp.headers.get("content-type", "application/json")
+            file = f"{req.source}/{req.label}.{'json' if is_json else 'csv'}"
             out = FIXTURES / file
             out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(pretty(resp.content))
+            out.write_text(pretty(resp.content) if is_json else resp.text)
             entries.append(
                 {
                     "label": req.label,
@@ -43,6 +49,10 @@ def main() -> None:
                 }
             )
             print(f"{req.label:32s} {len(resp.content):>8d} bytes")
+    if prefixes:  # keep the other entries as they were recorded
+        labels = {e["label"] for e in entries}
+        old = json.loads((FIXTURES / "manifest.json").read_text())["entries"]
+        entries = [e for e in old if e["label"] not in labels] + entries
     manifest = {
         "recorded_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "base_urls": BASE_URLS,
@@ -52,4 +62,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

@@ -14,6 +14,7 @@ from flexcast.optimise import optimise as run_optimiser
 from flexcast.prices import PriceSource, load_day_prices
 from flexcast.settlement import LONDON
 from flexcast.sources.elexon import ElexonClient
+from flexcast.sources.gas import GasClient
 from flexcast.sources.neso import NesoClient
 from flexcast.sources.octopus import OctopusClient
 from flexcast.storage import Storage
@@ -50,6 +51,7 @@ def ingest(
         OctopusClient(settings.octopus_base_url),
         region=settings.agile_region,
         neso=NesoClient(settings.neso_base_url),
+        gas=GasClient(settings.gas_base_url),
     )
     failed = ingester.run(first, last, names, concurrency=settings.http_concurrency)
     if failed:
@@ -113,6 +115,9 @@ def backtest(
     ] = None,
     description: Annotated[str, typer.Option(help="One line for the experiment log")] = "",
     market: Annotated[str, typer.Option(help="imbalance | day_ahead")] = "imbalance",
+    extra_features: Annotated[
+        str, typer.Option(help="Candidate input groups to add, comma-separated: gas,availability")
+    ] = "",
 ) -> None:
     """Rolling-origin backtest of all models; writes the report and the last LightGBM model."""
     if market not in ("imbalance", "day_ahead"):
@@ -126,7 +131,7 @@ def backtest(
         sensitivity,
         summarise,
     )
-    from flexcast.features import DAY_AHEAD_MODEL_FEATURES
+    from flexcast.features import ALL_COLUMNS, DAY_AHEAD_MODEL_FEATURES, EXTRA_FEATURES
     from flexcast.history import History
     from flexcast.models.base import save_model
     from flexcast.models.baselines import (
@@ -137,6 +142,12 @@ def backtest(
     )
     from flexcast.models.lgbm import LGBMQuantile
     from flexcast.optimise import Battery as BatteryCfg
+
+    groups = [g for g in extra_features.split(",") if g]
+    if unknown := set(groups) - EXTRA_FEATURES.keys():
+        raise typer.BadParameter(f"unknown feature groups: {sorted(unknown)}")
+    features = list(DAY_AHEAD_MODEL_FEATURES if market == "day_ahead" else ALL_COLUMNS)
+    features += [c for g in groups for c in EXTRA_FEATURES[g]]
 
     settings = Settings()
     storage = Storage(settings.data_uri)
@@ -155,13 +166,13 @@ def backtest(
         factories = {
             "naive_day_ahead": NaiveDayAhead,
             "seasonal_naive_day_ahead": SeasonalNaiveDayAhead,
-            "lgbm_quantile": lambda: LGBMQuantile(features=DAY_AHEAD_MODEL_FEATURES),
+            "lgbm_quantile": lambda: LGBMQuantile(features=features),
         }
     else:
         factories = {
             "naive_last_day": NaiveLastDay,
             "seasonal_naive": SeasonalNaive,
-            "lgbm_quantile": LGBMQuantile,
+            "lgbm_quantile": lambda: LGBMQuantile(features=features),
         }
     result = run(history, cfg, factories)
     base_strategy = "lgbm_quantile"
@@ -211,6 +222,10 @@ def backtest(
         storage.write_parquet(result.daily, f"backtest/experiments/{experiment}/daily.parquet")
         storage.write_parquet(
             result.forecasts, f"backtest/experiments/{experiment}/forecasts.parquet"
+        )
+        storage.write_parquet(
+            result.validation_forecasts,
+            f"backtest/experiments/{experiment}/validation_forecasts.parquet",
         )
         save_model(storage, lgbm_model, f"backtest/experiments/{experiment}/model", {})
         log_experiment(

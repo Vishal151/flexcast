@@ -60,7 +60,20 @@ DAY_AHEAD_COLUMNS = [
     "da_d1_max",
     "da_roll7_mean",
 ]
-OUTPUT_COLUMNS = ALL_COLUMNS + DAY_AHEAD_COLUMNS
+# Candidate inputs (docs/candidate-sources.md), built always and adopted only on validation.
+# Gas: System Average Price in £/MWh; at D-1 09:00 the latest gas day known is D-3.
+GAS_COLUMNS = ["gas_price", "gas_price_7d"]
+# Plant availability for day D (Elexon FOU2T14D, latest vintage, published by D-2), MW.
+# margin = what could run (dispatchable + interconnector imports + forecast wind) minus demand.
+AVAILABILITY_COLUMNS = [
+    "avail_ccgt",
+    "avail_nuclear",
+    "avail_interconnector",
+    "avail_dispatchable",
+    "margin",
+]
+EXTRA_FEATURES = {"gas": GAS_COLUMNS, "availability": AVAILABILITY_COLUMNS}
+OUTPUT_COLUMNS = ALL_COLUMNS + DAY_AHEAD_COLUMNS + GAS_COLUMNS + AVAILABILITY_COLUMNS
 DAY_AHEAD_MODEL_FEATURES = ALL_COLUMNS + DAY_AHEAD_COLUMNS
 
 
@@ -194,6 +207,24 @@ def build(history: History, decision_time: datetime, target_date: date) -> Featu
     da_week = [target_date - timedelta(days=k) for k in range(1, 8)]
     da_roll = prov.use("day_ahead", da[da["london_date"].isin(da_week)]).groupby("hhmm")["price"]
     X["da_roll7_mean"] = hhmm.map(da_roll.mean()).to_numpy(dtype=float)
+
+    # Gas: the same value for every period of the day.
+    gas = prov.use("gas", history.as_of("gas", decision_time).tail(7))
+    X["gas_price"] = gas["price"].iloc[-1] if len(gas) else np.nan
+    X["gas_price_7d"] = gas["price"].mean() if len(gas) else np.nan
+
+    # Availability: the latest vintage covering the target day, summed by kind of plant.
+    av = history.as_of("availability", decision_time, target_date)
+    av = prov.use("availability", av[av["publish_time"] == av["publish_time"].max()])
+    by_fuel = av.groupby("fuel_type")["output_usable"].sum()
+    ic = av.loc[av["interconnector"], "output_usable"].sum()
+    disp = av.loc[~av["interconnector"] & (av["fuel_type"] != "WIND"), "output_usable"].sum()
+    empty = av.empty
+    X["avail_ccgt"] = np.nan if empty else by_fuel.get("CCGT", 0)
+    X["avail_nuclear"] = np.nan if empty else by_fuel.get("NUCLEAR", 0)
+    X["avail_interconnector"] = np.nan if empty else ic
+    X["avail_dispatchable"] = np.nan if empty else disp
+    X["margin"] = X["avail_dispatchable"] + X["avail_interconnector"] + X["wind"] - X["ndf"]
 
     return Features(
         X=X[OUTPUT_COLUMNS],

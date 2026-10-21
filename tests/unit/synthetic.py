@@ -2,7 +2,9 @@
 exactly which row a feature came from:
 - price = london_day_ordinal % 97 + 2 * half_hour_of_local_day: unique per (day, clock time)
   within a 97-day window, with a realistic ~£94/MWh daily spread. MID = price + 0.5
-- NDF demand / WINDFOR generation / NESO solar = publish time in minutes since 2025-01-01
+- NDF demand / WINDFOR generation / NESO solar / CCGT availability = publish time in minutes
+  since 2025-01-01
+- gas SAP (£/MWh) = gas day ordinal % 97
 """
 
 from datetime import UTC, date, datetime, timedelta
@@ -71,4 +73,25 @@ def make_history(first: date, last: date) -> History:
     day_ahead = pd.DataFrame(
         {"start_time": hourly, "price": [encode_price(t) + 500 for t in hourly]}
     )
-    return History.from_frames(prices, pd.concat([apx, n2ex]), ndf, wind, embedded, day_ahead)
+    # Availability (FOU2T14D): hourly vintages for London days +2..+14 after the publish date.
+    av_rows = []
+    for pub in pd.date_range(lo, hi, freq="1h"):
+        pub_day = pub.tz_convert(LONDON).date()
+        for k in range(2, 15):
+            for fuel, mw, ic in (
+                ("CCGT", encode_publish(pub), False),
+                ("NUCLEAR", 4_000, False),
+                ("WIND", 9_999, False),
+                ("INTFR", 2_000, True),
+            ):
+                av_rows.append((pub, pub_day + timedelta(days=k), fuel, mw, ic))
+    availability = pd.DataFrame(
+        av_rows,
+        columns=["publish_time", "forecast_date", "fuel_type", "output_usable", "interconnector"],
+    )
+    gas = pd.DataFrame(
+        {"gas_day": days, "price_p_per_kwh": [d.toordinal() % 97 / 10 for d in days]}
+    )
+    return History.from_frames(
+        prices, pd.concat([apx, n2ex]), ndf, wind, embedded, day_ahead, availability, gas
+    )
