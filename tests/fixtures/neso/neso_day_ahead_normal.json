@@ -1,0 +1,263 @@
+{
+  "help": "https://api.neso.energy/api/3/action/help_show?name=datastore_search_sql",
+  "success": true,
+  "result": {
+    "records": [
+      {
+        "Date": "2025-06-10",
+        "Price": "63.010000",
+        "Delivery Period": "00:00 - 01:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "55.810000",
+        "Delivery Period": "01:00 - 02:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "52.050000",
+        "Delivery Period": "02:00 - 03:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "51.010000",
+        "Delivery Period": "03:00 - 04:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "56.760000",
+        "Delivery Period": "04:00 - 05:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "78.160000",
+        "Delivery Period": "05:00 - 06:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "73.940000",
+        "Delivery Period": "06:00 - 07:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "73.180000",
+        "Delivery Period": "07:00 - 08:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "77.790000",
+        "Delivery Period": "08:00 - 09:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "82.210000",
+        "Delivery Period": "09:00 - 10:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "86.070000",
+        "Delivery Period": "10:00 - 11:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "87.050000",
+        "Delivery Period": "11:00 - 12:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "83.460000",
+        "Delivery Period": "12:00 - 13:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "84.290000",
+        "Delivery Period": "13:00 - 14:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "85.070000",
+        "Delivery Period": "14:00 - 15:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "85.010000",
+        "Delivery Period": "15:00 - 16:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "87.560000",
+        "Delivery Period": "16:00 - 17:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "92.550000",
+        "Delivery Period": "17:00 - 18:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "109.150000",
+        "Delivery Period": "18:00 - 19:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "111.960000",
+        "Delivery Period": "19:00 - 20:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "106.830000",
+        "Delivery Period": "20:00 - 21:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "92.310000",
+        "Delivery Period": "21:00 - 22:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "90.430000",
+        "Delivery Period": "22:00 - 23:00"
+      },
+      {
+        "Date": "2025-06-10",
+        "Price": "81.960000",
+        "Delivery Period": "23:00 - 00:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "79.600000",
+        "Delivery Period": "00:00 - 01:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "76.540000",
+        "Delivery Period": "01:00 - 02:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "75.720000",
+        "Delivery Period": "02:00 - 03:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "72.730000",
+        "Delivery Period": "03:00 - 04:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "80.560000",
+        "Delivery Period": "04:00 - 05:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "95.990000",
+        "Delivery Period": "05:00 - 06:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "90.680000",
+        "Delivery Period": "06:00 - 07:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "86.820000",
+        "Delivery Period": "07:00 - 08:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "82.770000",
+        "Delivery Period": "08:00 - 09:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "78.090000",
+        "Delivery Period": "09:00 - 10:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "72.560000",
+        "Delivery Period": "10:00 - 11:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "75.860000",
+        "Delivery Period": "11:00 - 12:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "66.960000",
+        "Delivery Period": "12:00 - 13:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "55.010000",
+        "Delivery Period": "13:00 - 14:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "51.010000",
+        "Delivery Period": "14:00 - 15:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "58.100000",
+        "Delivery Period": "15:00 - 16:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "82.180000",
+        "Delivery Period": "16:00 - 17:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "87.920000",
+        "Delivery Period": "17:00 - 18:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "103.290000",
+        "Delivery Period": "18:00 - 19:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "100.930000",
+        "Delivery Period": "19:00 - 20:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "87.910000",
+        "Delivery Period": "20:00 - 21:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "71.870000",
+        "Delivery Period": "21:00 - 22:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "81.170000",
+        "Delivery Period": "22:00 - 23:00"
+      },
+      {
+        "Date": "2025-06-11",
+        "Price": "64.750000",
+        "Delivery Period": "23:00 - 00:00"
+      }
+    ],
+    "fields": [
+      {
+        "type": "date",
+        "id": "Date"
+      },
+      {
+        "type": "text",
+        "id": "Delivery Period"
+      },
+      {
+        "type": "numeric",
+        "id": "Price"
+      }
+    ],
+    "sql": "SELECT \"Date\", \"Delivery Period\", \"Price\" FROM \"4f27eea5-7038-4f73-9740-e3e4ad47c26a\" WHERE \"Date\" >= '2025-06-10' AND \"Date\" <= '2025-06-11' ORDER BY \"Date\", \"Delivery Period\""
+  }
+}

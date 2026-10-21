@@ -11,9 +11,11 @@ ingest:
 	uv run flexcast ingest $(if $(START),--start $(START)) $(if $(END),--end $(END))
 
 # Reproducible results table: fixed windows over the Stage 1 backfill.
+BACKTEST = FLEXCAST_GIT_SHA=$$(git rev-parse --short HEAD) uv run flexcast backtest \
+	--train-start 2024-10-20 --test-start 2025-10-20 --test-end 2026-10-19
 backtest:
-	FLEXCAST_GIT_SHA=$$(git rev-parse --short HEAD) uv run flexcast backtest \
-		--train-start 2024-10-20 --test-start 2025-10-20 --test-end 2026-10-19
+	$(BACKTEST) --market imbalance
+	$(BACKTEST) --market day_ahead
 
 docker:
 	docker build -t flexcast:local .

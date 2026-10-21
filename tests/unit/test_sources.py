@@ -213,3 +213,28 @@ def test_neso_rejects_rows_whose_gmt_time_disagrees() -> None:
     p = parse_rows(EmbeddedForecast, [EmbeddedForecast.from_row(r) for r in (good, bad)])
     assert len(p.rows) == 1 and len(p.rejects) == 1
     assert "NESO says 13:30" in p.rejects[0]["error"]
+
+
+@pytest.mark.parametrize(("d", "hours"), [(NORMAL, 24), (SPRING, 23), (AUTUMN, 25)])
+def test_day_ahead_prices_cover_the_london_day_in_utc_hours(
+    upstream: respx.MockRouter, d: date, hours: int
+) -> None:
+    start, end = london_day_bounds(d)
+    p = NesoClient(S.neso_base_url).day_ahead_prices(start, end)
+    assert not p.rejects
+    times = [r.start_time for r in p.rows]
+    assert len(times) == hours and times[0] == start and times[-1] == end - timedelta(hours=1)
+    assert all(t.tzinfo is UTC and t.minute == 0 for t in times)
+
+
+def test_day_ahead_rejects_malformed_periods() -> None:
+    from flexcast.sources.neso import DayAheadPrice
+
+    with pytest.raises(ValueError, match="unexpected delivery period"):
+        DayAheadPrice.from_row(
+            {"Date": "2025-06-11", "Delivery Period": "01:00 - 03:00", "Price": 1}
+        )
+    ok = DayAheadPrice.from_row(
+        {"Date": "2025-06-11", "Delivery Period": "23:00 - 00:00", "Price": 9}
+    )
+    assert ok["start_time"] == datetime(2025, 6, 11, 23, tzinfo=UTC)

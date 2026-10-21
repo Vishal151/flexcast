@@ -17,10 +17,10 @@ from datetime import date, datetime, time, timedelta
 import pandas as pd
 
 from flexcast.features import build, decision_time_for
-from flexcast.history import PRICE_LAG, History
+from flexcast.history import DAY_AHEAD_AVAILABLE, PRICE_LAG, History, Market
 from flexcast.models.base import COLUMNS, Model, pinball_loss
 from flexcast.optimise import Battery, optimise, settle
-from flexcast.settlement import london_day_bounds, period_starts
+from flexcast.settlement import LONDON, london_day_bounds, period_starts
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +36,7 @@ class BacktestConfig:
     retrain_every_days: int = 7
     decision_at: time = time(9)
     battery: Battery = field(default_factory=Battery)
+    market: Market = "imbalance"  # which price is forecast and settled against
     # Days before test_start that are forecast the same way and used only to choose settings
     # (e.g. the risk-aware alpha), so nothing is tuned on the test window.
     validation_days: int = 182
@@ -53,25 +54,33 @@ class BacktestResult:
     models: dict[str, Model]  # as last trained
     train_window: tuple[date, date]  # of the last retrain
     skipped: list[date]
+    market: Market = "imbalance"
 
 
 def days_between(first: date, last: date) -> list[date]:
     return [first + timedelta(days=i) for i in range((last - first).days + 1)]
 
 
-def training_cutoff(decision_time: datetime) -> date:
-    """Last target day whose every price was available before decision_time."""
-    d = decision_time.date()
+def training_cutoff(decision_time: datetime, market: Market = "imbalance") -> date:
+    """Last target day whose every price was available before decision_time.
+
+    Imbalance prices arrive an hour after each half-hour (so D-2 at a D-1 09:00 decision);
+    day-ahead prices for day X arrive at noon on X-1 (so D-1).
+    """
+    d = decision_time.astimezone(LONDON).date() + timedelta(days=1)
     while True:
-        _, end = london_day_bounds(d)
-        last_available = end - timedelta(minutes=30) + PRICE_LAG
+        if market == "day_ahead":
+            last_available = datetime.combine(d - timedelta(days=1), DAY_AHEAD_AVAILABLE, LONDON)
+        else:
+            _, end = london_day_bounds(d)
+            last_available = end - timedelta(minutes=30) + PRICE_LAG
         if last_available < decision_time:
             return d
         d -= timedelta(days=1)
 
 
 def feature_table(
-    history: History, days: list[date], decision_at: time
+    history: History, days: list[date], decision_at: time, market: Market = "imbalance"
 ) -> tuple[pd.DataFrame, pd.Series, list[date]]:
     """Features and actuals for every day with a complete set of actual prices.
 
@@ -79,7 +88,7 @@ def feature_table(
     """
     xs, ys, skipped = [], [], []
     for d in days:
-        actual = history.actual_prices(d)
+        actual = history.actual_prices(d, market)
         if len(actual) != len(period_starts(d)):
             skipped.append(d)
             continue
@@ -109,7 +118,7 @@ def run(
 ) -> BacktestResult:
     """`table` (from feature_table) can be passed in to reuse features across many runs."""
     X_all, y_all, skipped = table or feature_table(
-        history, days_between(cfg.train_start, cfg.test_end), cfg.decision_at
+        history, days_between(cfg.train_start, cfg.test_end), cfg.decision_at, cfg.market
     )
     target_dates = X_all.index.get_level_values("target_date")
     models: dict[str, Model] = {}
@@ -120,7 +129,7 @@ def run(
     for d in days_between(cfg.forecast_start, cfg.test_end):
         decision_time = decision_time_for(d, cfg.decision_at)
         if last_fit is None or (d - last_fit).days >= cfg.retrain_every_days:
-            cutoff = training_cutoff(decision_time)
+            cutoff = training_cutoff(decision_time, cfg.market)
             mask = (target_dates >= cfg.train_start) & (target_dates <= cutoff)
             for name, factory in factories.items():
                 models[name] = factory()
@@ -147,6 +156,7 @@ def run(
         models=models,
         train_window=train_window,
         skipped=[s for s in skipped if s >= cfg.test_start],
+        market=cfg.market,
     )
 
 

@@ -28,6 +28,8 @@ class Battery:
     initial_soc_kwh: float = 5.0
     terminal_soc_kwh: float | None = None  # None: same as initial
     degradation_gbp_per_kwh: float = 0.02
+    # Day-ahead auction products are whole hours: hold one power level across both half-hours.
+    hourly_blocks: bool = False
 
     @property
     def eta(self) -> float:
@@ -121,6 +123,14 @@ def optimise(
         # charging=1 allows charge only; charging=0 allows discharge only.
         prob += charge[t] <= b.power_kw * charging[t], f"charge_mode_{t}"
         prob += discharge[t] <= b.power_kw * (1 - charging[t]), f"discharge_mode_{t}"
+
+    if b.hourly_blocks:
+        # A half-hour starting at :30 must match the one before it (same UTC hour).
+        for t in periods:
+            if t > 0 and idx[t].minute == 30 and idx[t] - idx[t - 1] == pd.Timedelta(minutes=30):
+                # (PuLP 4: `var == var` compares the objects; a difference builds a constraint.)
+                prob += charge[t] - charge[t - 1] == 0, f"hour_block_charge_{t}"
+                prob += discharge[t] - discharge[t - 1] == 0, f"hour_block_discharge_{t}"
 
     # Terminal SoC: without it the optimum is to sell the stored energy for free money today.
     prob += soc[-1] == b.terminal, "terminal_soc"

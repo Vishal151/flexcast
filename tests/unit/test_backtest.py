@@ -179,3 +179,31 @@ def test_run_reuses_a_prepared_feature_table(history: History) -> None:
     a = run(history, CFG, {"naive": NaiveLastDay}).daily
     b = run(history, CFG, {"naive": NaiveLastDay}, table=table).daily
     pd.testing.assert_frame_equal(a, b)
+
+
+# --- day-ahead market ------------------------------------------------------------------------
+
+
+def test_training_cutoff_day_ahead_is_d_minus_1() -> None:
+    summer = datetime(2025, 6, 10, 8, 0, tzinfo=UTC)  # D-1 09:00 BST for D = 11 June
+    assert training_cutoff(summer, "day_ahead") == date(2025, 6, 10)  # published 9 June noon
+    assert training_cutoff(summer, "imbalance") == date(2025, 6, 9)
+
+
+def test_day_ahead_backtest_trains_up_to_d_minus_1_and_respects_hour_blocks(
+    history: History,
+) -> None:
+    from dataclasses import replace
+
+    from flexcast.models.baselines import NaiveDayAhead
+    from flexcast.optimise import Battery
+
+    SpyModel.fits.clear()
+    cfg = replace(CFG, market="day_ahead", battery=Battery(hourly_blocks=True))
+    res = run(history, cfg, {"spy": SpyModel, "naive_da": NaiveDayAhead})
+    first_retrain_last_day = SpyModel.fits[0][1]
+    assert first_retrain_last_day == date(2025, 6, 16)  # D-1 for D = 17 June
+    perfect = res.forecasts[res.forecasts.strategy == "perfect"]
+    assert (perfect["actual"].to_numpy()[0::2] == perfect["actual"].to_numpy()[1::2]).all()
+    wide = res.daily.pivot(index="target_date", columns="strategy", values="value_gbp")
+    assert (wide["naive_da"] <= wide["perfect"] + 1e-6).all()

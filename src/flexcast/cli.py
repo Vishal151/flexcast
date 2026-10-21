@@ -112,14 +112,31 @@ def backtest(
         str | None, typer.Option(help="Log this run to experiments/ under this name")
     ] = None,
     description: Annotated[str, typer.Option(help="One line for the experiment log")] = "",
+    market: Annotated[str, typer.Option(help="imbalance | day_ahead")] = "imbalance",
 ) -> None:
     """Rolling-origin backtest of all models; writes the report and the last LightGBM model."""
+    if market not in ("imbalance", "day_ahead"):
+        raise typer.BadParameter("market must be 'imbalance' or 'day_ahead'")
     from flexcast import report
-    from flexcast.backtest import BacktestConfig, add_risk_aware, run, sensitivity, summarise
+    from flexcast.backtest import (
+        BacktestConfig,
+        ModelFactory,
+        add_risk_aware,
+        run,
+        sensitivity,
+        summarise,
+    )
+    from flexcast.features import DAY_AHEAD_MODEL_FEATURES
     from flexcast.history import History
     from flexcast.models.base import save_model
-    from flexcast.models.baselines import NaiveLastDay, SeasonalNaive
+    from flexcast.models.baselines import (
+        NaiveDayAhead,
+        NaiveLastDay,
+        SeasonalNaive,
+        SeasonalNaiveDayAhead,
+    )
     from flexcast.models.lgbm import LGBMQuantile
+    from flexcast.optimise import Battery as BatteryCfg
 
     settings = Settings()
     storage = Storage(settings.data_uri)
@@ -130,16 +147,23 @@ def backtest(
         test_start=date.fromisoformat(test_start) if test_start else last - timedelta(days=364),
         test_end=last,
         train_start=date.fromisoformat(train_start) if train_start else days.min(),
+        market="day_ahead" if market == "day_ahead" else "imbalance",
+        battery=BatteryCfg(hourly_blocks=market == "day_ahead"),
     )
-    result = run(
-        history,
-        cfg,
-        {
+    factories: dict[str, ModelFactory]
+    if cfg.market == "day_ahead":
+        factories = {
+            "naive_day_ahead": NaiveDayAhead,
+            "seasonal_naive_day_ahead": SeasonalNaiveDayAhead,
+            "lgbm_quantile": lambda: LGBMQuantile(features=DAY_AHEAD_MODEL_FEATURES),
+        }
+    else:
+        factories = {
             "naive_last_day": NaiveLastDay,
             "seasonal_naive": SeasonalNaive,
             "lgbm_quantile": LGBMQuantile,
-        },
-    )
+        }
+    result = run(history, cfg, factories)
     base_strategy = "lgbm_quantile"
     if settings.calibration_window_days > 0:
         from flexcast.models.calibration import add_calibrated
@@ -160,15 +184,15 @@ def backtest(
     sens = sensitivity(result.forecasts, cfg.battery, (0.0, 0.01, 0.02, 0.04))
     summary = summarise(result.daily)
 
-    storage.write_parquet(result.daily, "backtest/daily.parquet")
-    storage.write_parquet(result.forecasts, "backtest/forecasts.parquet")
+    storage.write_parquet(result.daily, f"backtest/{market}/daily.parquet")
+    storage.write_parquet(result.forecasts, f"backtest/{market}/forecasts.parquet")
     lgbm_model = result.models["lgbm_quantile"]
     assert isinstance(lgbm_model, LGBMQuantile)
     train_end = result.train_window[1]
     save_model(
         storage,
         result.models["lgbm_quantile"],
-        f"models/lgbm_quantile/train_end={train_end}",
+        f"models/{market}/lgbm_quantile/train_end={train_end}",
         {
             "git_sha": settings.git_sha,
             "train_window": [str(d) for d in result.train_window],
@@ -194,6 +218,7 @@ def backtest(
             experiment,
             description,
             {
+                "market": market,
                 "lgbm": lgbm_model.config(),
                 "risk_alpha": risk.alpha,
                 "calibration": {

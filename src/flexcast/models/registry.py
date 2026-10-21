@@ -1,7 +1,12 @@
 """Name -> class, for loading saved models. LightGBM is imported lazily on first use."""
 
 from flexcast.models.base import Model
-from flexcast.models.baselines import NaiveLastDay, SeasonalNaive
+from flexcast.models.baselines import (
+    NaiveDayAhead,
+    NaiveLastDay,
+    SeasonalNaive,
+    SeasonalNaiveDayAhead,
+)
 
 
 class _Registry(dict[str, type[Model]]):
@@ -15,5 +20,10 @@ class _Registry(dict[str, type[Model]]):
 
 
 MODELS: dict[str, type[Model]] = _Registry(
-    {NaiveLastDay.name: NaiveLastDay, SeasonalNaive.name: SeasonalNaive}
+    {
+        NaiveLastDay.name: NaiveLastDay,
+        SeasonalNaive.name: SeasonalNaive,
+        NaiveDayAhead.name: NaiveDayAhead,
+        SeasonalNaiveDayAhead.name: SeasonalNaiveDayAhead,
+    }
 )

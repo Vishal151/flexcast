@@ -66,4 +66,9 @@ def make_history(first: date, last: date) -> History:
         emb_rows,
         columns=["publish_time", "start_time", "solar_mw", "solar_capacity_mw", "wind_mw"],
     )
-    return History.from_frames(prices, pd.concat([apx, n2ex]), ndf, wind, embedded)
+    # Day-ahead auction: hourly, price = imbalance encoding of the hour's start + 500.
+    hourly = starts[starts.minute == 0]
+    day_ahead = pd.DataFrame(
+        {"start_time": hourly, "price": [encode_price(t) + 500 for t in hourly]}
+    )
+    return History.from_frames(prices, pd.concat([apx, n2ex]), ndf, wind, embedded, day_ahead)

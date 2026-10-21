@@ -1,5 +1,5 @@
 {
-  "recorded_at": "2026-10-20T21:19:53+00:00",
+  "recorded_at": "2026-10-21T09:42:58+00:00",
   "base_urls": {
     "elexon": "https://data.elexon.co.uk/bmrs/api/v1",
     "octopus": "https://api.octopus.energy/v1",
@@ -381,6 +381,50 @@
         "sql": "SELECT \"Forecast_Datetime\", \"SETTLEMENT_DATE\", \"SETTLEMENT_PERIOD\", \"TIME_GMT\", \"EMBEDDED_SOLAR_FORECAST\", \"EMBEDDED_SOLAR_CAPACITY\", \"EMBEDDED_WIND_FORECAST\", \"EMBEDDED_WIND_CAPACITY\" FROM \"fc13df13-2dad-4a1c-b9e3-4569efba4955\" WHERE \"Forecast_Datetime\" >= '2025-10-24T23:00:00' AND \"Forecast_Datetime\" < '2025-10-25T23:00:00' AND \"SETTLEMENT_DATE\" <= '2025-10-27T00:00:00' ORDER BY \"Forecast_Datetime\", \"SETTLEMENT_DATE\", \"SETTLEMENT_PERIOD\""
       },
       "file": "neso/neso_embedded_autumn_dst_pub_d-1.json",
+      "content_type": "application/json;charset=utf-8"
+    },
+    {
+      "label": "neso_day_ahead_package",
+      "source": "neso",
+      "method": "GET",
+      "path": "/package_show",
+      "params": {
+        "id": "day-ahead-power-exchange-prices-nordpool"
+      },
+      "file": "neso/neso_day_ahead_package.json",
+      "content_type": "application/json;charset=utf-8"
+    },
+    {
+      "label": "neso_day_ahead_normal",
+      "source": "neso",
+      "method": "GET",
+      "path": "/datastore_search_sql",
+      "params": {
+        "sql": "SELECT \"Date\", \"Delivery Period\", \"Price\" FROM \"4f27eea5-7038-4f73-9740-e3e4ad47c26a\" WHERE \"Date\" >= '2025-06-10' AND \"Date\" <= '2025-06-11' ORDER BY \"Date\", \"Delivery Period\""
+      },
+      "file": "neso/neso_day_ahead_normal.json",
+      "content_type": "application/json;charset=utf-8"
+    },
+    {
+      "label": "neso_day_ahead_spring_dst",
+      "source": "neso",
+      "method": "GET",
+      "path": "/datastore_search_sql",
+      "params": {
+        "sql": "SELECT \"Date\", \"Delivery Period\", \"Price\" FROM \"4f27eea5-7038-4f73-9740-e3e4ad47c26a\" WHERE \"Date\" >= '2025-03-30' AND \"Date\" <= '2025-03-30' ORDER BY \"Date\", \"Delivery Period\""
+      },
+      "file": "neso/neso_day_ahead_spring_dst.json",
+      "content_type": "application/json;charset=utf-8"
+    },
+    {
+      "label": "neso_day_ahead_autumn_dst",
+      "source": "neso",
+      "method": "GET",
+      "path": "/datastore_search_sql",
+      "params": {
+        "sql": "SELECT \"Date\", \"Delivery Period\", \"Price\" FROM \"4f27eea5-7038-4f73-9740-e3e4ad47c26a\" WHERE \"Date\" >= '2025-10-25' AND \"Date\" <= '2025-10-26' ORDER BY \"Date\", \"Delivery Period\""
+      },
+      "file": "neso/neso_day_ahead_autumn_dst.json",
       "content_type": "application/json;charset=utf-8"
     }
   ]

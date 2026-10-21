@@ -48,6 +48,7 @@ DATASETS = {
         Dataset("windfor", ("publish_time", "start_time"), "publish_time"),
         Dataset("agile", ("valid_from", "product_code", "region"), "valid_from"),
         Dataset("embedded", ("publish_time", "start_time"), "publish_time"),
+        Dataset("day_ahead", ("start_time",), "start_time"),
     ]
 }
 
@@ -108,6 +109,7 @@ class Ingester:
             "windfor": lambda d: _records(self.elexon.windfor(*london_day_bounds(d))),
             "agile": self._agile,
             "embedded": self._embedded,
+            "day_ahead": lambda d: _records(self.neso.day_ahead_prices(*london_day_bounds(d))),
         }
 
     def _embedded(self, d: date) -> Records:

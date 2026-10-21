@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from flexcast.features import ALL_COLUMNS, build, decision_time_for
+from flexcast.features import OUTPUT_COLUMNS, build, decision_time_for
 from flexcast.history import History
 from flexcast.settlement import LONDON, period_starts
 from flexcast.storage import Storage
@@ -44,6 +44,7 @@ def poison_future(h: History, decision_time: datetime) -> History:
         ndf=bad(h.ndf, "demand"),
         windfor=bad(h.windfor, "generation"),
         embedded=embedded,
+        day_ahead=bad(h.day_ahead, "price"),
     )
 
 
@@ -68,7 +69,7 @@ def test_leakage_every_source_used_was_available_before_decision(
     h = history_for(synthetic_history, target)
     dt = decision_time_for(target)
     f = build(h, dt, target)
-    assert set(f.provenance) == {"prices", "mid", "ndf", "windfor", "embedded"}
+    assert set(f.provenance) == {"prices", "mid", "ndf", "windfor", "embedded", "day_ahead"}
     for source, t in f.provenance.items():
         assert t < dt, f"{source} used data available at {t}, decision {dt}"
 
@@ -95,7 +96,7 @@ def test_decision_time_is_london_wall_clock() -> None:
 @pytest.mark.parametrize("target", TARGETS)
 def test_shape_and_columns(synthetic_history: HistoryFactory, target: date) -> None:
     f = build(history_for(synthetic_history, target), decision_time_for(target), target)
-    assert list(f.X.columns) == ALL_COLUMNS
+    assert list(f.X.columns) == OUTPUT_COLUMNS
     assert list(f.X.index) == period_starts(target)
     assert (f.X["n_periods"] == len(period_starts(target))).all()
 
@@ -236,7 +237,38 @@ def test_solar_uses_latest_vintage_at_least_two_hours_old(
 def test_history_without_embedded_data_gives_nan_solar(synthetic_history: HistoryFactory) -> None:
     h = history_for(synthetic_history, NORMAL)
     h2 = History(
-        prices=h.prices, mid=h.mid, ndf=h.ndf, windfor=h.windfor, embedded=h.embedded.iloc[:0]
+        prices=h.prices,
+        mid=h.mid,
+        ndf=h.ndf,
+        windfor=h.windfor,
+        embedded=h.embedded.iloc[:0],
+        day_ahead=h.day_ahead,
     )
     f = build(h2, decision_time_for(NORMAL), NORMAL)
     assert f.X["solar"].isna().all() and "embedded" not in f.provenance
+
+
+def test_day_ahead_lags_use_yesterday_not_the_target_day(synthetic_history: HistoryFactory) -> None:
+    """At D-1 09:00, D-1's auction prices are known (published D-2 10:00); D's aren't yet."""
+    f = build(history_for(synthetic_history, NORMAL), decision_time_for(NORMAL), NORMAL).X
+    for ts, (_, row) in zip(pd.DatetimeIndex(f.index), f.iterrows(), strict=True):
+        hour_start = ts.floor("h")
+        assert row["da_d1"] == encode_price(hour_start - pd.Timedelta(days=1)) + 500
+        assert row["da_d7"] == encode_price(hour_start - pd.Timedelta(days=7)) + 500
+    assert (f["da_d1_max"] >= f["da_d1"]).all() and (f["da_d1_min"] <= f["da_d1"]).all()
+
+
+def test_day_ahead_availability_rule_is_noon_on_the_day_before(
+    synthetic_history: HistoryFactory,
+) -> None:
+    h = history_for(synthetic_history, NORMAL)
+    row = h.day_ahead[h.day_ahead["start_time"] == pd.Timestamp("2025-06-11T12:30Z")].iloc[0]
+    assert row["available_at"] == pd.Timestamp("2025-06-10T11:00Z")  # 12:00 BST on D-1
+    assert row["price"] == encode_price(pd.Timestamp("2025-06-11T12:00Z")) + 500  # hour's price
+
+
+def test_actual_day_ahead_prices_are_half_hourly(synthetic_history: HistoryFactory) -> None:
+    h = history_for(synthetic_history, AUTUMN)
+    actual = h.actual_prices(AUTUMN, "day_ahead")
+    assert list(actual.index) == period_starts(AUTUMN)  # 50 half-hours
+    assert (actual.to_numpy()[0::2] == actual.to_numpy()[1::2]).all()

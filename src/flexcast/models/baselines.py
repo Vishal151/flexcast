@@ -42,3 +42,19 @@ class SeasonalNaive(_CopyDay):
     name = "seasonal_naive"
     source = "price_d7"
     fallback = "price_roll7_mean"
+
+
+class NaiveDayAhead(_CopyDay):
+    """Yesterday's day-ahead auction prices (published at 10:00 on D-2)."""
+
+    name = "naive_day_ahead"
+    source = "da_d1"
+    fallback = "da_d1_mean"
+
+
+class SeasonalNaiveDayAhead(_CopyDay):
+    """Day-ahead auction prices at the same time a week earlier."""
+
+    name = "seasonal_naive_day_ahead"
+    source = "da_d7"
+    fallback = "da_roll7_mean"

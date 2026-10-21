@@ -15,6 +15,7 @@ import pandas as pd
 
 from flexcast.backtest import BacktestResult, training_cutoff, valuate
 from flexcast.features import decision_time_for
+from flexcast.history import Market
 from flexcast.models.base import COLUMNS, QUANTILES
 from flexcast.optimise import Battery
 from flexcast.settlement import LONDON
@@ -71,6 +72,7 @@ def rolling_calibration(
     window_days: int,
     hours_per_block: int | None = None,
     adjust: tuple[str, ...] = tuple(COLUMNS),
+    market: Market = "imbalance",
 ) -> pd.DataFrame:
     """Append `name`: `strategy` recalibrated each day from the previous `window_days` of its own
     forecasts whose actuals were known at that day's decision time (target D: up to D-2)."""
@@ -78,7 +80,7 @@ def rolling_calibration(
     out = []
     for d, day in base.groupby("target_date", sort=True):
         assert isinstance(d, date)
-        last_known = training_cutoff(decision_time_for(d))
+        last_known = training_cutoff(decision_time_for(d), market)
         first = last_known - timedelta(days=window_days - 1)
         past = base[(base["target_date"] >= first) & (base["target_date"] <= last_known)]
         offsets = fit_offsets(past, hours_per_block, adjust=adjust)
@@ -100,7 +102,9 @@ def add_calibrated(
     only from days known at its decision time, so validation days calibrate test days."""
     test_start = result.forecasts["target_date"].min()
     every = pd.concat([result.validation_forecasts, result.forecasts], ignore_index=True)
-    calibrated = rolling_calibration(every, base, name, window_days, hours_per_block, adjust)
+    calibrated = rolling_calibration(
+        every, base, name, window_days, hours_per_block, adjust, result.market
+    )
     rows = calibrated[calibrated["strategy"] == name]
     is_test = rows["target_date"] >= test_start
     result.validation_forecasts = pd.concat(

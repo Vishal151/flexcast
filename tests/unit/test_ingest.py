@@ -42,7 +42,7 @@ def ingester(storage: Storage) -> Ingester:
 
 def ingest_all_fixtures(ing: Ingester) -> None:
     for d in DAYS:
-        ing.ingest_day(d, ["system_prices", "mid", "fuelhh", "agile"])
+        ing.ingest_day(d, ["system_prices", "mid", "fuelhh", "agile", "day_ahead"])
     for d in FORECAST_DAYS:
         ing.ingest_day(d, ["ndf", "windfor"])
     for d in EMBEDDED_DAYS:
@@ -64,7 +64,7 @@ def test_rerun_produces_identical_files(
     first = tree_hashes(tmp_path)
     ingest_all_fixtures(ingester)
     assert tree_hashes(tmp_path) == first
-    assert len(first) == 4 * len(DAYS) + 2 * len(FORECAST_DAYS) + len(EMBEDDED_DAYS)
+    assert len(first) == 5 * len(DAYS) + 2 * len(FORECAST_DAYS) + len(EMBEDDED_DAYS)
 
 
 @pytest.mark.parametrize(("d", "n"), DAYS.items())
@@ -165,3 +165,12 @@ def test_embedded_partition_has_derived_utc_start_times(
     assert "period_end_gmt" not in df
     assert str(df["start_time"].dt.tz) == "UTC" and str(df["publish_time"].dt.tz) == "UTC"
     assert not df.duplicated(["publish_time", "start_time"]).any()
+
+
+@pytest.mark.parametrize(("d", "hours"), [(NORMAL, 24), (SPRING, 23), (AUTUMN, 25)])
+def test_day_ahead_partition_is_one_london_day(
+    upstream: respx.MockRouter, ingester: Ingester, storage: Storage, d: date, hours: int
+) -> None:
+    ingester.ingest_day(d, ["day_ahead"])
+    df = storage.read_parquet(f"raw/day_ahead/date={d}/part.parquet")
+    assert len(df) == hours and str(df["start_time"].dt.tz) == "UTC"

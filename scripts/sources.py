@@ -112,4 +112,16 @@ def neso_requests() -> list[Request]:
         reqs.append(
             Request(f"neso_embedded_{label}", "neso", "/datastore_search_sql", {"sql": sql})
         )
+    from flexcast.sources.neso import DAY_AHEAD_PACKAGE, day_ahead_sql
+
+    da_resource = "4f27eea5-7038-4f73-9740-e3e4ad47c26a"  # recorded resource; client discovers it
+    reqs.append(
+        Request("neso_day_ahead_package", "neso", "/package_show", {"id": DAY_AHEAD_PACKAGE})
+    )
+    for kind, d in DAYS.items():
+        start, end = london_day_utc(d)
+        sql = day_ahead_sql(da_resource, start.date(), (end - timedelta(seconds=1)).date())
+        reqs.append(
+            Request(f"neso_day_ahead_{kind}", "neso", "/datastore_search_sql", {"sql": sql})
+        )
     return reqs

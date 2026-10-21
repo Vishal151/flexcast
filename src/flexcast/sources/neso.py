@@ -104,6 +104,7 @@ class NesoClient:
         self.base_url = base_url.rstrip("/")
         self.client = client or httpx.Client(timeout=TIMEOUT, follow_redirects=True)
         self._archives: dict[int, str] | None = None
+        self._day_ahead: str | None = None
 
     def archive_resources(self) -> dict[int, str]:
         """Year -> resource id of the yearly archive (discovered, not hardcoded)."""
@@ -130,3 +131,70 @@ class NesoClient:
             rows = [EmbeddedForecast.from_row(r) for r in result["records"]]
             out.extend(parse_rows(EmbeddedForecast, rows))
         return out
+
+    def day_ahead_prices(self, start: datetime, end: datetime) -> "Parsed[DayAheadPrice]":
+        return day_ahead_prices(self, start, end)
+
+
+# --- N2EX GB day-ahead auction prices --------------------------------------------------------
+
+DAY_AHEAD_PACKAGE = "day-ahead-power-exchange-prices-nordpool"
+
+
+def day_ahead_sql(resource_id: str, first_utc_date: date, last_utc_date: date) -> str:
+    return (
+        f'SELECT "Date", "Delivery Period", "Price" FROM "{resource_id}" '
+        f"WHERE \"Date\" >= '{first_utc_date.isoformat()}' "
+        f"AND \"Date\" <= '{last_utc_date.isoformat()}' "
+        f'ORDER BY "Date", "Delivery Period"'
+    )
+
+
+class DayAheadPrice(BaseModel):
+    """One hourly auction price. NESO's Date/Delivery Period are UTC (verified against Octopus
+    Agile; docs/data-sources.md), so start_time = Date + hour, in UTC."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    start_time: datetime
+    price: float
+
+    @classmethod
+    def from_row(cls, r: dict[str, Any]) -> dict[str, Any]:
+        period = str(r["Delivery Period"])
+        start_h, end_h = (int(part.strip()[:2]) for part in period.split("-"))
+        if (start_h + 1) % 24 != end_h:
+            raise ValueError(f"unexpected delivery period {period!r}")
+        day = date.fromisoformat(str(r["Date"])[:10])
+        return {
+            "start_time": datetime.combine(day, time(start_h), UTC),
+            "price": r["Price"],
+        }
+
+
+def _day_ahead_resource(client: "NesoClient") -> str:
+    """Discovered once per client (the portal could re-issue the resource id)."""
+    if client._day_ahead is None:
+        body = get_json(client.client, f"{client.base_url}/package_show", {"id": DAY_AHEAD_PACKAGE})
+        (resource,) = [r for r in body["result"]["resources"] if "N2EX" in r["name"]]
+        client._day_ahead = str(resource["id"])
+    return client._day_ahead
+
+
+def day_ahead_prices(client: "NesoClient", start: datetime, end: datetime) -> Parsed[DayAheadPrice]:
+    """Hourly prices with start_time in [start, end) (UTC hours; a London day has 23-25)."""
+    rid = _day_ahead_resource(client)
+    first = start.astimezone(UTC).date()
+    last = (end - timedelta(seconds=1)).astimezone(UTC).date()
+    params = {"sql": day_ahead_sql(rid, first, last)}
+    result = get_json(client.client, f"{client.base_url}/datastore_search_sql", params)["result"]
+    out: Parsed[DayAheadPrice] = Parsed()
+    for r in result["records"]:
+        try:
+            row = DayAheadPrice.from_row(r)
+        except (ValueError, KeyError) as e:
+            out.rejects.append({"error": str(e), "raw": r})
+            continue
+        if start <= row["start_time"] < end:
+            out.extend(parse_rows(DayAheadPrice, [row]))
+    return out
