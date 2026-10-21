@@ -48,6 +48,6 @@ demo:
 # The .py files are the source; jupytext syncs them into .ipynb, which keep the outputs.
 notebooks:
 	uv run jupytext --sync notebooks/*.py
-	uv run jupyter nbconvert --to notebook --execute --inplace notebooks/*.ipynb
+	uv run jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=3600 notebooks/*.ipynb
 
 .PHONY: lint test ingest backtest docker up down itest live demo notebooks

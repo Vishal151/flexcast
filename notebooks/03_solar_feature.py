@@ -58,6 +58,10 @@ print(
 
 # Validation window: the six months before the test year (same as the risk-aware alpha choice).
 VAL_START, VAL_END, TRAIN_START = date(2025, 4, 21), date(2025, 10, 19), date(2024, 10, 20)
+# LightGBM settings in force when this decision was made (before tuning in notebook 04), so the
+# comparison reproduces exactly. The code defaults now hold the tuned settings.
+PRE_TUNING = {"num_leaves": 31, "min_data_in_leaf": 50, "feature_fraction": 0.9, "lambda_l2": 0.0}
+PRE_TUNING_ROUNDS = 300
 
 # %% [markdown]
 # ## 1. What the solar forecast looks like at decision time
@@ -136,8 +140,14 @@ result = run(
     history,
     cfg,
     {
-        "baseline (23 inputs)": lambda: LGBMQuantile(features=FEATURE_COLUMNS),
-        "+ solar (27 inputs)": lambda: LGBMQuantile(features=FEATURE_COLUMNS + EMBEDDED_COLUMNS),
+        "baseline (23 inputs)": lambda: LGBMQuantile(
+            features=FEATURE_COLUMNS, params=PRE_TUNING, num_rounds=PRE_TUNING_ROUNDS
+        ),
+        "+ solar (27 inputs)": lambda: LGBMQuantile(
+            features=FEATURE_COLUMNS + EMBEDDED_COLUMNS,
+            params=PRE_TUNING,
+            num_rounds=PRE_TUNING_ROUNDS,
+        ),
     },
 )
 summary = summarise(result.daily)
