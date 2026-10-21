@@ -10,3 +10,7 @@ Generated from `log.jsonl` by `flexcast.experiments`; do not edit by hand.
 | tuned | tuned LightGBM settings (notebook 04): strong regularisation, 150 rounds | 36.61 | 13.52 | 30.46 | 9.60 | 0.69 | 2025-10-20..2026-10-19 | cdf4eb2 | 2026-10-21 |
 | calibrated | production strategy: tuned model + rolling calibration (90d, band only) + risk-aware alpha chosen on validation | 36.61 | 13.52 | 30.46 | 9.28 | 0.77 | 2025-10-20..2026-10-19 | 22903eb | 2026-10-21 |
 | day_ahead | day-ahead auction market: tuned model + DA lags, hourly blocks, calibrated, alpha on validation | 45.50 | 65.37 | 12.43 | 3.91 | 0.78 | 2025-10-20..2026-10-19 | e6c54b2 | 2026-10-21 |
+| cand_da_rerun | candidate inputs: day-ahead model + [] | 45.50 | 65.37 | 12.43 | 3.91 | 0.78 | 2025-10-20..2026-10-19 | 535527d | 2026-10-21 |
+| cand_gas | candidate inputs: day-ahead model + [gas] | 45.69 | 65.64 | 11.82 | 3.77 | 0.79 | 2025-10-20..2026-10-19 | 535527d | 2026-10-21 |
+| cand_availability | candidate inputs: day-ahead model + [availability] | 45.90 | 65.95 | 12.87 | 4.00 | 0.78 | 2025-10-20..2026-10-19 | 535527d | 2026-10-21 |
+| cand_gas_availability | candidate inputs: day-ahead model + [gas,availability] | 45.56 | 65.46 | 12.00 | 3.77 | 0.79 | 2025-10-20..2026-10-19 | 535527d | 2026-10-21 |

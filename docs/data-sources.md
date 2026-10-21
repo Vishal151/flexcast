@@ -179,6 +179,27 @@ exceptions via their early runs). The decision time, more than the model, limits
 - No duplicate (Date, Delivery Period) rows in 2021-09-20..2026-10-21. The current day can be partial
   (2026-10-21 at 09:35Z had 22 rows, to 21:00-22:00).
 
+### Elexon FOU2T14D: plant availability by fuel, 2-14 days ahead (candidate input)
+- `/datasets/FOU2T14D?publishDateTimeFrom&publishDateTimeTo` (1-day windows), no key. Hourly vintages
+  (`publishTime` on the hour, ~247 rows each): `forecastDate` (London date, `forecastDateTimezone`
+  Europe/London), `fuelType`, `outputUsable` MW, `interconnector` flag (interconnectors are fuel types
+  such as `INTFR`, `INTNSL`, `INTVKL`).
+- **Horizon starts at publish London date + 2**, so the last vintage covering day D is published at
+  ~23:00 London on D-2; at the D-1 09:00 decision it is ~10 h old. Every target day 2024-10-25..2026-10-20
+  had a vintage (median CCGT availability ~25.8 GW, nuclear ~4.4 GW, coal 0).
+- Backfill 2024-10-18..2026-10-20: 4.3 M rows, 5.7 MB. `available_at = publish_time`.
+
+### National Gas System Average Price (SAP) (candidate input)
+- `https://data.nationalgas.com/api/find-gas-data-download?applicableFor=Y&dateFrom=YYYY-MM-DD&dateTo=...
+  &dateType=GASDAY&latestFlag=Y&ids=PUBOB603&type=CSV`: no key; **CSV only**. Found by reading the
+  portal's web app (the endpoint isn't documented). Columns: `Applicable At` (UK local), `Applicable For`
+  (gas day, DD/MM/YYYY), `Data Item` ("SAP, Actual Day"), `Value` (p/kWh). Empty body if none yet.
+- **Timing:** the portal republishes a rolling window daily at 11:40 UTC (12:40 BST); gas day d first
+  appears on d+1 (`latestFlag=N` shows each republication). Rule: available 13:00 London on d+1, so at
+  D-1 09:00 the latest known gas day is D-3. Values were not revised in the samples checked.
+- The ONS republishes the same series weekly as .xlsx (~6 days' lag); not used.
+- 2024-10-18..2026-10-20: no gaps, £21-74/MWh (×10 from p/kWh).
+
 ## SPEC §2 edits (applied)
 WINDFOR hourly, MID provider `APXMIDP`, 1-day publish-window cap, MID instants, TEMP daily/low priority.
 
